@@ -10,21 +10,17 @@ On first launch it walks you through Steam authentication in your browser. After
 
 ### First-time Setup (Steam Login)
 
-> **[screenshot: onboarding — Steam OpenID login page]**
->
-> _Replace this block with `docs/screenshots/onboarding.png`_
+![screenshot: onboarding — Steam OpenID login page](docs/screenshots/onboarding.png)
 
-### Web Player
+### Web Player (LOCALHOST)
 
-> **[screenshot: main player view — Sound Tracks and Discovered Media sections]**
->
-> _Replace this block with `docs/screenshots/player.png`_
+![screenshot: main player view — Sound Tracks and Discovered Media sections](docs/screenshots/player.png)
 
 ---
 
 ## Features
 
-- Scans all configured Steam library paths for audio files
+- Scans all configured Steam library paths for audio (and mp4) files (file types are configurable)
 - On Windows, auto-discovers Steam install location from the registry; additional library paths (external drives, etc.) are merged from `libraryfolders.vdf`
 - Separates **Sound Tracks** (Steam music library) from **Discovered Media** (game audio found in `steamapps/common`)
 - Built-in web player with track queueing, auto-advance, and per-album media-type filtering
