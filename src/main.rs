@@ -2,6 +2,7 @@ mod config;
 mod database;
 mod scanner;
 mod server;
+mod setup;
 mod steam;
 
 use std::env;
@@ -11,6 +12,8 @@ const DEFAULT_CONFIG: &str = "config/scanner_conf.yaml";
 
 #[tokio::main]
 async fn main() {
+    setup::load_dotenv();
+
     let start = Instant::now();
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -21,15 +24,24 @@ async fn main() {
         .cloned()
         .unwrap_or_else(|| DEFAULT_CONFIG.to_owned());
 
-    let serve_bind: Option<String> = args.iter().find_map(|a| {
-        if a == "--serve" {
-            Some("127.0.0.1:8086".to_owned())
-        } else if let Some(addr) = a.strip_prefix("--serve=") {
-            Some(addr.to_owned())
-        } else {
-            None
-        }
-    });
+    let serve_bind: String = if args.iter().any(|a| a == "--no-serve") {
+        String::new()
+    } else {
+        args.iter().find_map(|a| {
+            if a == "--serve" {
+                Some("127.0.0.1:8086".to_owned())
+            } else {
+                a.strip_prefix("--serve=").map(|s| s.to_owned())
+            }
+        }).unwrap_or_else(|| "127.0.0.1:8086".to_owned())
+    };
+
+    if env::var("STEAM_ID").is_err() || env::var("STEAM_API_KEY").is_err() {
+        println!("SETUP: STEAM_ID or STEAM_API_KEY not set — starting first-time setup");
+        let creds = setup::run_setup().await;
+        env::set_var("STEAM_ID", &creds.steam_id);
+        env::set_var("STEAM_API_KEY", &creds.api_key);
+    }
 
     let cfg = config::load_config(&config_path);
 
@@ -95,7 +107,7 @@ async fn main() {
         start.elapsed().as_secs_f64()
     );
 
-    if let Some(bind_addr) = serve_bind {
-        server::start(&bind_addr, &cfg.db_file, &player_db).await;
+    if !serve_bind.is_empty() {
+        server::start(&serve_bind, &cfg.db_file, &player_db).await;
     }
 }

@@ -37,12 +37,12 @@ h2 small { color: #555; text-transform: none; letter-spacing: 0; margin-left: 8p
 .row:hover { background: #181818; }
 .row-name { color: #7ab4e8; flex: 1; }
 .row-meta { color: #555; font-size: 0.85em; flex-shrink: 0; }
-.playlists { display: flex; gap: 5px; flex-shrink: 0; }
-.pl-btn {
-  font: 0.72em monospace; padding: 1px 6px; border: 1px solid #333;
-  color: #777; text-decoration: none; border-radius: 2px; white-space: nowrap;
+.floppy-btn {
+  display: none; background: none; border: none; color: #555;
+  cursor: pointer; font-size: 1.1em; padding: 0 2px; flex-shrink: 0; line-height: 1;
 }
-.pl-btn:hover { border-color: #e8c040; color: #e8c040; }
+.floppy-btn.loaded { display: block; }
+.row:hover .floppy-btn.loaded { color: #afa; }
 .badges { display: flex; gap: 4px; flex-shrink: 0; }
 .badge {
   font-size: 0.72em; padding: 1px 5px; border-radius: 2px;
@@ -153,7 +153,8 @@ const TYPE_OFF  = {}  // albumId -> Set<type>
 
 const isTypeOff = (albumId, type) => !!(TYPE_OFF[albumId] && TYPE_OFF[albumId].has(type))
 
-const toggleType = (albumId, type, btn) => {
+const typeToggleClick = (evt, albumId, type, btn) => {
+  evt.stopPropagation()
   if (!TYPE_OFF[albumId]) TYPE_OFF[albumId] = new Set()
   if (TYPE_OFF[albumId].has(type)) {
     TYPE_OFF[albumId].delete(type)
@@ -163,7 +164,6 @@ const toggleType = (albumId, type, btn) => {
     btn.className = 'type-toggle off'
   }
   filterTypeRows(albumId)
-  rebuildPlaylistBtns(albumId)
   if (player.albumId === albumId && TRACK_REG[albumId]) {
     const cur = player.tracks[player.idx]
     player.tracks = TRACK_REG[albumId].tracks.filter(t => !isTypeOff(albumId, t.media_type))
@@ -172,25 +172,31 @@ const toggleType = (albumId, type, btn) => {
   }
 }
 
+const floppyClick = (evt, btn) => {
+  evt.stopPropagation()
+  const albumId = btn.dataset.albumId
+  const reg = TRACK_REG[albumId]
+  if (!reg) return
+  const active = reg.tracks.filter(t => !isTypeOff(albumId, t.media_type))
+  if (!active.length) return
+  const activeTypes = [...new Set(active.map(t => t.media_type))].sort()
+  const typeSuffix = activeTypes.length === reg.allTypes.length ? 'all' : activeTypes.join('-')
+  const tracks = active.map(t =>
+    `    <track>\n      <location>file://${t.full_path.replace(/ /g, '%20')}</location>\n      <title>${esc(t.file_name)}</title>\n    </track>`
+  ).join('\n')
+  const xspf = `<?xml version="1.0" encoding="UTF-8"?>\n<playlist version="1" xmlns="http://xspf.org/ns/0/">\n  <trackList>\n${tracks}\n  </trackList>\n</playlist>`
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([xspf], { type: 'application/xspf+xml' }))
+  a.download = `${reg.title}-${typeSuffix}-vlc-playlist.xspf`
+  a.click()
+}
+
 const filterTypeRows = (albumId) => {
   const panel = document.getElementById('tp-' + albumId)
   if (!panel) return
   for (const tr of panel.querySelectorAll('tr[data-type]')) {
     tr.style.display = isTypeOff(albumId, tr.dataset.type) ? 'none' : ''
   }
-}
-
-const rebuildPlaylistBtns = (albumId) => {
-  const reg  = TRACK_REG[albumId]
-  const plEl = document.getElementById('pl-' + albumId)
-  if (!reg || !plEl) return
-  const base   = `/api/album/tracks?title=${encodeURIComponent(reg.title)}&scan_type=${reg.scanType}`
-  const active = reg.allTypes.filter(t => !isTypeOff(albumId, t))
-  plEl.innerHTML = active.map(t =>
-    `<a class="pl-btn" href="${base}&vlc=1&type=${t}" download="${esc(reg.title)}_${t}.xspf">${t}</a>`
-  ).join('') + (active.length > 1
-    ? `<a class="pl-btn" href="${base}&vlc=1" download="${esc(reg.title)}_all.xspf">ALL</a>`
-    : '')
 }
 
 // ── now playing bar ───────────────────────────────────────────────────────────
@@ -230,7 +236,7 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
       <td class="dim">${esc(t.full_path)}</td>
     </tr>`
   }).join('')
-  return `<table><tr><th></th><th>file</th><th>type</th><th>size</th></tr>${rows}</table>`
+  return `<table><tr><th></th><th>file</th><th>type</th><th>size</th><th>path</th></tr>${rows}</table>`
 }
 
 // ── page build ────────────────────────────────────────────────────────────────
@@ -270,15 +276,19 @@ function buildAlbums(albums, containerId, scanType, prefix) {
     div.dataset.name = (a.title || '').toLowerCase()
 
     const badgesHtml = scanType === 'music'
-      ? types.map(t => `<button class="type-toggle" onclick="event.stopPropagation();toggleType('${id}','${esc(t)}',this)">${esc(t)}</button>`).join('')
+      ? types.map(t => `<button class="type-toggle" onclick="typeToggleClick(event,'${id}','${esc(t)}',this)">${esc(t)}</button>`).join('')
       : types.map(t => `<span class="badge">${esc(t)}</span>`).join('')
+
+    const floppyHtml = scanType === 'music'
+      ? `<button class="floppy-btn" id="fl-${esc(id)}" data-album-id="${esc(id)}" onclick="floppyClick(event,this)" title="Save VLC playlist">💾</button>`
+      : ''
 
     div.innerHTML = `
       <div class="row" data-title="${esc(a.title)}" data-scan-type="${esc(scanType)}" data-id="${esc(id)}" onclick="toggleAlbum(this)">
         <span class="row-name">${esc(a.title)}</span>
         <div class="badges">${badgesHtml}</div>
         <span class="row-meta">${(a.track_count||0).toLocaleString()} files</span>
-        <div class="playlists" id="pl-${esc(id)}"></div>
+        ${floppyHtml}
       </div>
       <div class="tracks-panel" id="tp-${esc(id)}"><span class="msg">loading…</span></div>`
     el.appendChild(div)
@@ -301,7 +311,7 @@ async function toggleAlbum(row) {
 
   TRACK_REG[id] = { tracks, urlFn, allTypes: types, title, scanType }
 
-  rebuildPlaylistBtns(id)
+  document.getElementById('fl-' + id)?.classList.add('loaded')
   panel.innerHTML = tracksTable(tracks, urlFn, id, false)
   refreshHighlight()
 }

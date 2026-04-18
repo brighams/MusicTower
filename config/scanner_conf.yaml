@@ -2,6 +2,9 @@ db_file: media/starkeeper.db
 media_type:
   - mp3
   - ogg
+  - oga
+  - opus
+  - webm
   - flac
   - wav
   - aiff
@@ -9,6 +12,7 @@ media_type:
   - mp4
   - midi
   - mid
+  - aac
 scan_roots:
   - $HOME/.steam/steam/steamapps/music/
   - $HOME/.steam/steam/steamapps/common/
