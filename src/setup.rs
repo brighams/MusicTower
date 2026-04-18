@@ -308,19 +308,20 @@ const LOGIN_HTML: &str = r##"<!DOCTYPE html><html lang="en"><head><meta charset=
 body{font:15px/1.6 system-ui,monospace;background:#0e0e16;color:#ccc;
      display:flex;align-items:center;justify-content:center;min-height:100vh}
 .card{background:#161622;border:1px solid #2a2a40;border-radius:12px;
-      padding:40px 48px;max-width:520px;width:100%}
+      padding:40px 48px;max-width:540px;width:100%}
 .logo{font-size:2.8em;margin-bottom:8px}
 h1{color:#e8c040;font-size:1.4em;margin-bottom:4px}
-.step{color:#7a9;font-size:0.88em;margin-bottom:24px}
+.step{color:#7a9;font-size:0.88em;margin-bottom:20px}
+.disclaimer{background:#1e1810;border:1px solid #5a4a20;border-radius:6px;
+            padding:14px 16px;margin-bottom:20px;font-size:0.88em;line-height:1.7}
+.disclaimer strong{color:#e8c040;display:block;margin-bottom:6px;font-size:0.97em}
 .info{background:#1e1e2e;border-left:3px solid #4a7a5a;padding:14px 16px;
       border-radius:0 6px 6px 0;margin-bottom:24px;font-size:0.88em;line-height:1.8}
 .info strong{color:#afa}
 .info code{background:#252535;padding:1px 5px;border-radius:3px;font-size:0.92em}
-.btn{display:inline-flex;align-items:center;gap:10px;
-     background:#1b2838;border:1px solid #4c6b8a;color:#c6d4df;
-     text-decoration:none;padding:12px 22px;border-radius:4px;
-     font-size:0.95em;cursor:pointer;transition:background 0.15s;font-family:inherit}
-.btn:hover{background:#2a475e;border-color:#66c0f4;color:#fff}
+.steam-btn{display:inline-block;text-decoration:none;opacity:0.92;transition:opacity 0.15s}
+.steam-btn:hover{opacity:1}
+.steam-btn img{display:block}
 .privacy{color:#555;font-size:0.82em;margin-top:18px;line-height:1.5}
 .privacy code{background:#1a1a2a;padding:1px 4px;border-radius:2px}
 </style>
@@ -329,25 +330,25 @@ h1{color:#e8c040;font-size:1.4em;margin-bottom:4px}
   <div class="logo">⭐</div>
   <h1>Starkeeper Media</h1>
   <p class="step">First-time Setup — Step 1 of 2</p>
+  <div class="disclaimer">
+    <strong>⚠ Independent project — not affiliated with Valve or Steam in any way.</strong>
+    This app runs entirely on your local machine. The only external connections it makes
+    are to Steam's OpenID login (this step) and the Steam Web API to fetch your owned
+    games list for building the music catalog. No data leaves your machine beyond those
+    two Steam API calls.
+  </div>
   <div class="info">
     <strong>What's about to happen:</strong><br>
     1. You'll sign in with Steam to identify your account<br>
     2. You'll provide a Steam Web API key (we'll walk you through it)<br>
     3. Both are saved to a local <code>.env</code> file on this machine
   </div>
-  <a class="btn" href="/auth/steam">
-    <svg width="20" height="20" viewBox="0 0 233 233" fill="#66c0f4">
-      <path d="M116.5 0C52.1 0 0 52.1 0 116.5c0 55.4 38.7 101.8 90.6 113.5
-               l30.8-73.5c-2.2.3-4.5.5-6.8.5-26.5 0-48-21.5-48-48s21.5-48
-               48-48 48 21.5 48 48c0 22.5-15.5 41.4-36.4 46.7L97.4 228
-               c6.2 1.6 12.7 2.5 19.3 2.5 64.4 0 116.5-52.1
-               116.5-116.5S180.9 0 116.5 0z"/>
-    </svg>
-    Sign in with Steam
+  <a class="steam-btn" href="/auth/steam">
+    <img src="https://steamcommunity-a.akamaihd.net/public/images/signinthroughsteam/sits_large_noborder.png"
+         alt="Sign in through Steam" width="180" height="35">
   </a>
-  <p class="privacy">Nothing is transmitted to any server other than Steam's official
-  authentication service. Your credentials are stored only in a local
-  <code>.env</code> file and are never uploaded anywhere.</p>
+  <p class="privacy">Your credentials are stored only in a local <code>.env</code> file
+  and are never uploaded anywhere.</p>
 </div></body></html>"##;
 
 const STYLE: &str = r#"<style>

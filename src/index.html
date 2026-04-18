@@ -26,9 +26,13 @@ h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 1px;
 .filter-row input:focus { outline: none; border-color: #e8c040; }
 
 h2 { font-size: 1em; color: #888; letter-spacing: 1px; text-transform: uppercase;
-     border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; margin-bottom: 4px; }
+     border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; margin-bottom: 4px;
+     cursor: pointer; user-select: none; }
+h2:hover { color: #aaa; }
 h2 small { color: #555; text-transform: none; letter-spacing: 0; margin-left: 8px; font-weight: normal; }
+.section-arrow { margin-right: 6px; }
 .section { margin-bottom: 32px; }
+.section-body.collapsed { display: none; }
 
 .row {
   display: flex; justify-content: space-between; align-items: center;
@@ -95,13 +99,13 @@ tr.playing td { background: #1a1a22; }
 </div>
 
 <div class="section">
-  <h2>Sound Tracks <small id="st-count"></small></h2>
-  <div id="soundtracks"><span class="msg">loading…</span></div>
+  <h2 onclick="toggleSection(this)"><span class="section-arrow">▾</span>Sound Tracks <small id="st-count"></small></h2>
+  <div id="soundtracks" class="section-body"><span class="msg">loading…</span></div>
 </div>
 
 <div class="section">
-  <h2>Discovered Media <small id="dm-count"></small></h2>
-  <div id="media"><span class="msg">loading…</span></div>
+  <h2 onclick="toggleSection(this)"><span class="section-arrow">▾</span>Discovered Media <small id="dm-count"></small></h2>
+  <div id="media" class="section-body"><span class="msg">loading…</span></div>
 </div>
 
 <script>
@@ -146,7 +150,17 @@ const playBtnClick = (btn) => {
   }
 }
 
+// ── section collapse ──────────────────────────────────────────────────────────
+
+const toggleSection = (h2) => {
+  const body = h2.nextElementSibling
+  const collapsed = body.classList.toggle('collapsed')
+  h2.querySelector('.section-arrow').textContent = collapsed ? '▸' : '▾'
+}
+
 // ── track registry & type filters ────────────────────────────────────────────
+
+let TYPE_ORDER = []  // lowercase, config priority order
 
 const TRACK_REG = {}  // albumId -> { tracks, urlFn, allTypes, title, scanType }
 const TYPE_OFF  = {}  // albumId -> Set<type>
@@ -251,7 +265,14 @@ async function load() {
   const stList = await stRes.json()
   const dmList = await dmRes.json()
 
-  const parts = sum.by_type.map(r => `<strong>${r.count.toLocaleString()}</strong>&thinsp;${r.media_type}`)
+  TYPE_ORDER = (sum.media_type_order || [])
+
+  const byTypeMap = Object.fromEntries((sum.by_type || []).map(r => [r.media_type.toUpperCase(), r.count]))
+  const orderedKeys = TYPE_ORDER.map(t => t.toUpperCase()).filter(t => byTypeMap[t])
+  const extraKeys = Object.keys(byTypeMap).filter(t => !orderedKeys.includes(t))
+  const parts = [...orderedKeys, ...extraKeys].map(t =>
+    `<strong>${byTypeMap[t].toLocaleString()}</strong>&thinsp;${t}`
+  )
   document.getElementById('summary').innerHTML =
     `<strong>${sum.total.toLocaleString()}</strong> files &nbsp;·&nbsp; ` + parts.join(' &nbsp;·&nbsp; ')
     + ` &nbsp;|&nbsp; <strong>${(sum.soundtracks||0).toLocaleString()}</strong> sound tracks`
@@ -264,6 +285,16 @@ async function load() {
   buildAlbums(dmList, 'media', 'files', 'dm')
 }
 
+const initTypeDefaults = (albumId, types) => {
+  if (types.length <= 1) return
+  if (!TYPE_OFF[albumId]) TYPE_OFF[albumId] = new Set()
+  const priority = TYPE_ORDER.map(t => t.toUpperCase())
+  const bestType = priority.find(t => types.includes(t)) || types[0]
+  for (const t of types) {
+    if (t !== bestType) TYPE_OFF[albumId].add(t)
+  }
+}
+
 function buildAlbums(albums, containerId, scanType, prefix) {
   const el = document.getElementById(containerId)
   if (!albums.length) { el.innerHTML = '<span class="msg">none found</span>'; return }
@@ -271,17 +302,19 @@ function buildAlbums(albums, containerId, scanType, prefix) {
   for (const a of albums) {
     const types = (a.types || '').split(',').filter(Boolean).sort()
     const id    = prefix + '_' + encodeURIComponent(a.title).replace(/'/g, '%27')
+
+    initTypeDefaults(id, types)
+
     const div   = document.createElement('div')
     div.className    = 'album-entry'
     div.dataset.name = (a.title || '').toLowerCase()
 
-    const badgesHtml = scanType === 'music'
-      ? types.map(t => `<button class="type-toggle" onclick="typeToggleClick(event,'${id}','${esc(t)}',this)">${esc(t)}</button>`).join('')
-      : types.map(t => `<span class="badge">${esc(t)}</span>`).join('')
+    const badgesHtml = types.map(t => {
+      const off = isTypeOff(id, t) ? ' off' : ''
+      return `<button class="type-toggle${off}" onclick="typeToggleClick(event,'${id}','${esc(t)}',this)">${esc(t)}</button>`
+    }).join('')
 
-    const floppyHtml = scanType === 'music'
-      ? `<button class="floppy-btn" id="fl-${esc(id)}" data-album-id="${esc(id)}" onclick="floppyClick(event,this)" title="Save VLC playlist">💾</button>`
-      : ''
+    const floppyHtml = `<button class="floppy-btn" id="fl-${esc(id)}" data-album-id="${esc(id)}" onclick="floppyClick(event,this)" title="Save VLC playlist">💾</button>`
 
     div.innerHTML = `
       <div class="row" data-title="${esc(a.title)}" data-scan-type="${esc(scanType)}" data-id="${esc(id)}" onclick="toggleAlbum(this)">

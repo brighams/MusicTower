@@ -28,6 +28,7 @@ use tower_http::cors::{Any, CorsLayer};
 struct AppState {
     db: Arc<Mutex<Connection>>,
     now_playing: Arc<Mutex<Option<Value>>>,
+    media_type_order: Vec<String>,
 }
 
 // ── SQL ───────────────────────────────────────────────────────────────────────
@@ -303,6 +304,7 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
         "SELECT media_type, COUNT(*) as count FROM steam_files GROUP BY media_type ORDER BY count DESC",
         (),
     );
+    let media_type_order: Vec<Value> = s.media_type_order.iter().map(|t| Value::String(t.clone())).collect();
     let total: i64 = db
         .query_row("SELECT COUNT(*) FROM steam_files", (), |r| r.get(0))
         .unwrap_or(0);
@@ -312,7 +314,7 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
     let discovered: i64 = db
         .query_row("SELECT COUNT(DISTINCT title) FROM steam_files WHERE scan_type = 'files'", (), |r| r.get(0))
         .unwrap_or(0);
-    Json(json!({ "total": total, "by_type": by_type, "soundtracks": soundtracks, "discovered": discovered }))
+    Json(json!({ "total": total, "by_type": by_type, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
 }
 
 async fn serve_index() -> impl IntoResponse {
@@ -737,7 +739,7 @@ fn ensure_certs(cert_path: &str, key_path: &str) {
 
 // ── startup ───────────────────────────────────────────────────────────────────
 
-pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str) {
+pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_type_order: &[String]) {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .ok();
@@ -757,6 +759,7 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str) {
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         now_playing: Arc::new(Mutex::new(None)),
+        media_type_order: media_type_order.to_vec(),
     };
 
     let cors = CorsLayer::new()

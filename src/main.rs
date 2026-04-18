@@ -113,6 +113,6 @@ async fn main() {
     );
 
     if !serve_bind.is_empty() {
-        server::start(&serve_bind, &cfg.db_file, &player_db).await;
+        server::start(&serve_bind, &cfg.db_file, &player_db, &extensions).await;
     }
 }
