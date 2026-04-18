@@ -5,81 +5,140 @@
 <title>Starkeeper Media</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font: 14px/1.5 monospace; background: #111; color: #ccc; padding: 24px; }
-h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 1px; }
-#summary { margin-bottom: 20px; color: #7a9; border-left: 3px solid #2a5; padding-left: 12px; }
-#summary strong { color: #afa; }
-
-#now-playing {
-  display: none; margin-bottom: 20px;
-  background: #161622; border-left: 3px solid #e8c040; padding: 10px 14px;
+body {
+  font: 14px/1.5 monospace; padding: 24px; color: #d8c8f0;
+  background: linear-gradient(160deg, #0e0820 0%, #160d30 50%, #0c0618 100%);
+  min-height: 100vh;
 }
-#np-label { color: #e8c040; font-size: 0.8em; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
-#np-filename { color: #fff; margin-bottom: 8px; }
-#np-tracks { max-height: 220px; overflow-y: auto; }
+h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 2px;
+     text-shadow: 0 0 16px rgba(232,192,64,0.35); }
+#summary {
+  margin-bottom: 20px; color: #b090d8; padding-left: 12px;
+  border-left: 3px solid #6030a0;
+}
+#summary strong { color: #d0a8ff; }
 
+/* ── now playing (deep vivid) ──────────────────────────────────────── */
+#now-playing {
+  display: none; margin-bottom: 20px; padding: 10px 16px;
+  background: linear-gradient(160deg, #1a0035 0%, #2e0055 55%, #180030 100%);
+  border-left: 4px solid #c060f0;
+  box-shadow: 0 0 24px rgba(160,0,255,0.25), 0 2px 8px rgba(0,0,0,0.6);
+  position: sticky; top: 0; z-index: 100;
+}
+#np-inner { position: relative; }
+#np-popout {
+  position: absolute; top: 0; right: 0;
+  background: none; border: 1px solid #3a1060; color: #5a2888;
+  cursor: pointer; font-size: 0.78em; padding: 1px 6px; border-radius: 2px;
+  font-family: inherit; line-height: 1.6; transition: border-color 0.12s, color 0.12s;
+}
+#np-popout:hover { border-color: #c060f0; color: #c060f0; box-shadow: 0 0 6px rgba(180,60,240,0.35); }
+#np-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.np-btn {
+  background: rgba(180,0,255,0.08); border: 1px solid #6a28a0; color: #b080d8;
+  cursor: pointer; font-size: 0.85em; padding: 2px 8px; border-radius: 3px;
+  font-family: inherit; line-height: 1.7; flex-shrink: 0; user-select: none;
+  transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.np-btn:hover { border-color: #df60ff; color: #f0c0ff; box-shadow: 0 0 8px rgba(200,60,255,0.4); }
+.np-btn.active { background: rgba(200,50,255,0.18); border-color: #e060f8; color: #f080ff;
+  box-shadow: 0 0 12px rgba(220,60,255,0.5); }
+#np-stop:hover { border-color: #f86090; color: #ff80a8; box-shadow: 0 0 8px rgba(255,60,100,0.35); }
+#np-volume { width: 90px; cursor: pointer; flex-shrink: 0; accent-color: #c060f0; vertical-align: middle; opacity: 0.85; }
+#np-volume:hover { opacity: 1; }
+#np-track { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding-left: 8px; border-left: 1px solid #4a1070; }
+#np-label { color: #c060f0; font-size: 0.72em; letter-spacing: 2px; text-transform: uppercase;
+  flex-shrink: 0; text-shadow: 0 0 8px rgba(180,60,255,0.7); }
+#np-filename { color: #f0d8ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.95em; }
+#np-tracks { max-height: 200px; overflow-y: auto; scrollbar-color: #7020a0 #0e0020; scrollbar-width: thin; }
+#np-tracks::-webkit-scrollbar { width: 6px; }
+#np-tracks::-webkit-scrollbar-track { background: #0e0020; }
+#np-tracks::-webkit-scrollbar-thumb { background: #7020a0; border-radius: 3px; }
+#np-tracks::-webkit-scrollbar-thumb:hover { background: #b040e0; }
+#np-tracks table { background: transparent; }
+#np-tracks th { color: #6a2090; border-bottom-color: #2a0050; }
+#np-tracks td { color: #c8a8e8; }
+#np-tracks tr:hover td { background: rgba(140,0,200,0.15); }
+#np-tracks tr.playing td { background: rgba(160,0,220,0.25); }
+#np-tracks tr.playing .play-btn { color: #e060f8; }
+
+/* ── filter ──────────────────────────────────────────────────────── */
 .filter-row { margin-bottom: 20px; }
 .filter-row input {
-  background: #1e1e1e; border: 1px solid #444; color: #ccc;
+  background: #1a0d30; border: 1px solid #4a2878; color: #d0b8f0;
   padding: 4px 10px; width: 300px; font: inherit; border-radius: 3px;
 }
-.filter-row input:focus { outline: none; border-color: #e8c040; }
+.filter-row input:focus { outline: none; border-color: #c060f0; box-shadow: 0 0 6px rgba(180,60,240,0.3); }
+.filter-row input::placeholder { color: #5a3878; }
 
-h2 { font-size: 1em; color: #888; letter-spacing: 1px; text-transform: uppercase;
-     border-bottom: 1px solid #2a2a2a; padding-bottom: 6px; margin-bottom: 4px;
+/* ── section headers ─────────────────────────────────────────────── */
+h2 { font-size: 1em; color: #7848b8; letter-spacing: 1px; text-transform: uppercase;
+     border-bottom: 1px solid #2a1450; padding-bottom: 6px; margin-bottom: 4px;
      cursor: pointer; user-select: none; }
-h2:hover { color: #aaa; }
-h2 small { color: #555; text-transform: none; letter-spacing: 0; margin-left: 8px; font-weight: normal; }
+h2:hover { color: #b070e0; }
+h2 small { color: #4a2870; text-transform: none; letter-spacing: 0; margin-left: 8px; font-weight: normal; }
 .section-arrow { margin-right: 6px; }
 .section { margin-bottom: 32px; }
 .section-body.collapsed { display: none; }
 
+/* ── album rows ──────────────────────────────────────────────────── */
 .row {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 4px; cursor: pointer; gap: 16px; border-bottom: 1px solid #1c1c1c;
+  padding: 5px 4px; cursor: pointer; gap: 16px; border-bottom: 1px solid #1e0e38;
 }
-.row:hover { background: #181818; }
-.row-name { color: #7ab4e8; flex: 1; }
-.row-meta { color: #555; font-size: 0.85em; flex-shrink: 0; }
+.row:hover { background: rgba(120,40,200,0.12); }
+.row-name { color: #c090f0; flex: 1; }
+.row-meta { color: #5a3878; font-size: 0.85em; flex-shrink: 0; }
 .floppy-btn {
-  display: none; background: none; border: none; color: #555;
+  display: none; background: none; border: none; color: #4a2870;
   cursor: pointer; font-size: 1.1em; padding: 0 2px; flex-shrink: 0; line-height: 1;
+  transition: color 0.12s;
 }
 .floppy-btn.loaded { display: block; }
-.row:hover .floppy-btn.loaded { color: #afa; }
+.row:hover .floppy-btn.loaded { color: #c060f0; text-shadow: 0 0 8px rgba(180,60,240,0.6); }
 .badges { display: flex; gap: 4px; flex-shrink: 0; }
 .badge {
   font-size: 0.72em; padding: 1px 5px; border-radius: 2px;
-  background: #202020; color: #777; letter-spacing: 0.5px;
+  background: #1e0d38; color: #6040a0; letter-spacing: 0.5px;
 }
 .type-toggle {
   font-size: 0.72em; padding: 1px 5px; border-radius: 2px; letter-spacing: 0.5px;
-  cursor: pointer; border: 1px solid #3a5a3a; background: #1e2e1e; color: #afa;
-  user-select: none; font-family: inherit;
+  cursor: pointer; border: 1px solid #6030a0; background: #1e0d38; color: #c080f0;
+  user-select: none; font-family: inherit; transition: border-color 0.1s, color 0.1s;
 }
+.type-toggle:hover { border-color: #c060f0; color: #e0a8ff; }
 .type-toggle.off {
-  background: #1a1a1a; color: #444; border-color: #222; text-decoration: line-through;
+  background: #120830; color: #3a2055; border-color: #1e0d38; text-decoration: line-through;
 }
 
+/* ── track panels ────────────────────────────────────────────────── */
 .tracks-panel { display: none; padding: 4px 8px 12px 20px; }
 .tracks-panel.open { display: block; }
 table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
-th { color: #555; text-align: left; padding: 3px 8px; border-bottom: 1px solid #1e1e1e; }
-td { padding: 2px 8px; }
-tr:hover td { background: #181818; }
-td a { color: #7ab4e8; text-decoration: none; }
+th { color: #5a3080; text-align: left; padding: 3px 8px; border-bottom: 1px solid #2a1050; }
+td { padding: 2px 8px; color: #c0a8e0; }
+tr:hover td { background: rgba(100,30,160,0.18); }
+td a { color: #c090f0; text-decoration: none; }
 td a:hover { color: #e8c040; }
-.dim { color: #555; }
-.msg { color: #555; font-style: italic; padding: 6px 0; display: block; }
+.dim { color: #5a3878; }
+.msg { color: #4a2870; font-style: italic; padding: 6px 0; display: block; }
 
 .play-col { width: 20px; padding: 2px 2px 2px 4px !important; }
 .play-btn {
   visibility: hidden; background: none; border: none;
-  color: #7ab4e8; cursor: pointer; font-size: 0.85em; padding: 0; line-height: 1;
+  color: #9060c0; cursor: pointer; font-size: 0.85em; padding: 0; line-height: 1;
 }
 tr:hover .play-btn { visibility: visible; }
-tr.playing .play-btn { visibility: visible; color: #e8c040; }
-tr.playing td { background: #1a1a22; }
+tr.playing .play-btn { visibility: visible; color: #e060f8; }
+tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
+
+/* ── scrollbars (track panels) ───────────────────────────────────── */
+.tracks-panel { scrollbar-color: #4a1880 #0e0820; scrollbar-width: thin; }
+.tracks-panel::-webkit-scrollbar { width: 6px; }
+.tracks-panel::-webkit-scrollbar-track { background: #0e0820; }
+.tracks-panel::-webkit-scrollbar-thumb { background: #4a1880; border-radius: 3px; }
+.tracks-panel::-webkit-scrollbar-thumb:hover { background: #8030c0; }
 </style>
 </head>
 <body>
@@ -89,9 +148,22 @@ tr.playing td { background: #1a1a22; }
 <audio id="audio-player"></audio>
 
 <div id="now-playing">
-  <div id="np-label">Now Playing</div>
-  <div id="np-filename">—</div>
+  <div id="np-inner">
+  <button id="np-popout" onclick="openPopout()" title="Pop out player">⧉</button>
+  <div id="np-bar">
+    <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
+    <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
+    <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
+    <button class="np-btn" id="np-random" onclick="toggleRandom()"    title="Random mode">🎲</button>
+    <input  id="np-volume" type="range" min="0" max="1" step="0.01" value="1"
+            oninput="AUDIO.volume=this.value" title="Volume">
+    <div id="np-track">
+      <span id="np-label">Now Playing</span>
+      <span id="np-filename">—</span>
+    </div>
+  </div>
   <div id="np-tracks"></div>
+  </div>
 </div>
 
 <div class="filter-row">
@@ -117,9 +189,18 @@ function esc(s) {
 
 const AUDIO = document.getElementById('audio-player')
 const player = { albumId: null, tracks: [], urlFn: null, idx: -1 }
+let randomMode = false
+let ALL_ST_ALBUMS = []
+let ALL_DM_ALBUMS = []
 
+AUDIO.onplay  = () => { document.getElementById('np-play').textContent = '⏸' }
+AUDIO.onpause = () => { document.getElementById('np-play').textContent = '▶' }
 AUDIO.onended = () => {
-  if (player.idx + 1 < player.tracks.length) playIdx(player.idx + 1)
+  if (randomMode) {
+    playRandom()
+  } else if (player.idx + 1 < player.tracks.length) {
+    playIdx(player.idx + 1)
+  }
 }
 
 const playIdx = (idx) => {
@@ -140,6 +221,62 @@ const playFrom = (albumId, fileId) => {
   player.tracks  = filtered
   player.urlFn   = reg.urlFn
   playIdx(idx)
+}
+
+const stopPlayback = () => {
+  AUDIO.pause()
+  AUDIO.src = ''
+  player.albumId = null
+  player.tracks  = []
+  player.idx     = -1
+  document.getElementById('now-playing').style.display = 'none'
+  refreshHighlight()
+}
+
+const skipTrack = () => {
+  if (randomMode) {
+    playRandom()
+  } else if (player.idx + 1 < player.tracks.length) {
+    playIdx(player.idx + 1)
+  }
+}
+
+const togglePlayPause = () => {
+  if (AUDIO.paused) { AUDIO.play() } else { AUDIO.pause() }
+}
+
+let popupWin = null
+const openPopout = () => {
+  if (popupWin && !popupWin.closed) { popupWin.focus(); return }
+  popupWin = window.open('/popup', 'skplayer',
+    'popup,width=540,height=110,resizable=yes')
+}
+
+const toggleRandom = () => {
+  randomMode = !randomMode
+  document.getElementById('np-random').classList.toggle('active', randomMode)
+}
+
+const playRandom = async () => {
+  const pool = [...ALL_ST_ALBUMS, ...ALL_DM_ALBUMS]
+  if (!pool.length) return
+  const album = pool[Math.floor(Math.random() * pool.length)]
+  const scanType = ALL_ST_ALBUMS.includes(album) ? 'music' : 'files'
+  const prefix = scanType === 'music' ? 'st' : 'dm'
+  const albumId = prefix + '_' + encodeURIComponent(album.title).replace(/'/g, '%27')
+  const urlFn = t => `/media/${t.file_id}`
+  const tracks = await fetch(`/api/album/tracks?title=${encodeURIComponent(album.title)}&scan_type=${scanType}`).then(r => r.json())
+  if (!tracks.length) return
+  const types = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
+  if (!TRACK_REG[albumId]) {
+    TRACK_REG[albumId] = { tracks, urlFn, allTypes: types, title: album.title, scanType }
+  }
+  const filtered = tracks.filter(t => !isTypeOff(albumId, t.media_type))
+  const queue = filtered.length ? filtered : tracks
+  player.albumId = albumId
+  player.tracks  = queue
+  player.urlFn   = urlFn
+  playIdx(Math.floor(Math.random() * queue.length))
 }
 
 const playBtnClick = (btn) => {
@@ -266,6 +403,8 @@ async function load() {
   const dmList = await dmRes.json()
 
   TYPE_ORDER = (sum.media_type_order || [])
+  ALL_ST_ALBUMS = stList
+  ALL_DM_ALBUMS = dmList
 
   const byTypeMap = Object.fromEntries((sum.by_type || []).map(r => [r.media_type.toUpperCase(), r.count]))
   const orderedKeys = TYPE_ORDER.map(t => t.toUpperCase()).filter(t => byTypeMap[t])

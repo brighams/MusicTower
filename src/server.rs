@@ -1,4 +1,5 @@
 const INDEX_HTML: &str = include_str!("index.html");
+const POPUP_HTML: &str = include_str!("popup.html");
 
 use axum::{
     body::Body,
@@ -319,6 +320,10 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
 
 async fn serve_index() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], INDEX_HTML)
+}
+
+async fn serve_popup() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], POPUP_HTML)
 }
 
 #[derive(Deserialize)]
@@ -769,6 +774,7 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
 
     let app = Router::new()
         .route("/", get(serve_index))
+        .route("/popup", get(serve_popup))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))

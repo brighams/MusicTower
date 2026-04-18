@@ -75,7 +75,7 @@ fn create_schema(conn: &Connection) -> Result<()> {
             scan_type TEXT NOT NULL,
             title TEXT NOT NULL,
             dir_path TEXT NOT NULL,
-            full_path TEXT NOT NULL,
+            full_path TEXT NOT NULL UNIQUE,
             file_name TEXT NOT NULL,
             size INTEGER NOT NULL,
             modified INTEGER NOT NULL,
@@ -184,7 +184,7 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?)",
         )?;
 
         for (i, (path, scan_root)) in files.iter().enumerate() {

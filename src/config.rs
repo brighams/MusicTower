@@ -51,6 +51,8 @@ pub fn load_config(path: &str) -> Config {
         eprintln!("ERROR: failed to parse config {path}: {e}");
         std::process::exit(3);
     });
-    cfg.scan_roots = cfg.scan_roots.iter().map(|r| expand_env(r)).collect();
+    cfg.scan_roots = cfg.scan_roots.iter()
+        .map(|r| expand_env(r).trim_end_matches(['/', '\\']).to_owned())
+        .collect();
     cfg
 }
