@@ -1,6 +1,3 @@
-const INDEX_HTML: &str = include_str!("index.html");
-const POPUP_HTML: &str = include_str!("popup.html");
-
 use axum::{
     body::Body,
     extract::{Path, Query, State},
@@ -9,13 +6,11 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
 use mime_guess::MimeGuess;
 use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
-    net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -316,14 +311,6 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
         .query_row("SELECT COUNT(DISTINCT title) FROM steam_files WHERE scan_type = 'files'", (), |r| r.get(0))
         .unwrap_or(0);
     Json(json!({ "total": total, "by_type": by_type, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
-}
-
-async fn serve_index() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], INDEX_HTML)
-}
-
-async fn serve_popup() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], POPUP_HTML)
 }
 
 #[derive(Deserialize)]
@@ -707,64 +694,21 @@ fn spawn_details_updater(player_db_path: String) {
     });
 }
 
-// ── TLS cert generation ───────────────────────────────────────────────────────
-
-fn ensure_certs(cert_path: &str, key_path: &str) {
-    use std::{fs, path::Path};
-    if Path::new(cert_path).exists() && Path::new(key_path).exists() {
-        println!("SERVER: using existing certs");
-        return;
-    }
-    println!("SERVER: generating self-signed TLS certificate...");
-    if let Some(dir) = Path::new(cert_path).parent() {
-        fs::create_dir_all(dir).unwrap_or_else(|e| {
-            eprintln!("ERROR: cannot create certs dir: {e}");
-            std::process::exit(1);
-        });
-    }
-    let rcgen::CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(vec![
-        "localhost".to_owned(),
-        "127.0.0.1".to_owned(),
-    ])
-    .unwrap_or_else(|e| {
-        eprintln!("ERROR: cert generation failed: {e}");
-        std::process::exit(1);
-    });
-    fs::write(cert_path, cert.pem()).unwrap_or_else(|e| {
-        eprintln!("ERROR: writing cert: {e}");
-        std::process::exit(1);
-    });
-    fs::write(key_path, key_pair.serialize_pem()).unwrap_or_else(|e| {
-        eprintln!("ERROR: writing key: {e}");
-        std::process::exit(1);
-    });
-    println!("SERVER: self-signed certs written to {cert_path} / {key_path}");
-    println!("SERVER: NOTE — for production use certbot with a public domain, not self-signed certs");
-}
-
 // ── startup ───────────────────────────────────────────────────────────────────
 
-pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_type_order: &[String]) {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .ok();
+pub async fn start(bind_addr: &str, db_path: String, player_db_path: String, media_type_order: Vec<String>) {
+    use tracing::{error, info};
 
-    const CERT: &str = ".secrets/cert.pem";
-    const KEY: &str = ".secrets/key.pem";
-
-    ensure_certs(CERT, KEY);
-
-    let conn = Connection::open(db_path).unwrap_or_else(|e| {
-        eprintln!("ERROR: opening db for server: {e}");
-        std::process::exit(1);
-    });
-    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
-        .ok();
+    let conn = match Connection::open(db_path) {
+        Ok(c) => c,
+        Err(e) => { error!("ERROR: opening db for server: {e}"); return; }
+    };
+    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;").ok();
 
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         now_playing: Arc::new(Mutex::new(None)),
-        media_type_order: media_type_order.to_vec(),
+        media_type_order,
     };
 
     let cors = CorsLayer::new()
@@ -773,8 +717,6 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
         .allow_headers(Any);
 
     let app = Router::new()
-        .route("/", get(serve_index))
-        .route("/popup", get(serve_popup))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))
@@ -798,31 +740,16 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
         .with_state(state)
         .layer(cors);
 
-    let addr: SocketAddr = bind_addr.parse().unwrap_or_else(|e| {
-        eprintln!("ERROR: invalid bind address '{bind_addr}': {e}");
-        std::process::exit(1);
-    });
+    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
+        Ok(l) => l,
+        Err(e) => { error!("ERROR: binding to {bind_addr}: {e}"); return; }
+    };
 
-    let tls = RustlsConfig::from_pem_file(CERT, KEY).await.unwrap_or_else(|e| {
-        eprintln!("ERROR: loading TLS config: {e}");
-        std::process::exit(1);
-    });
+    spawn_details_updater(player_db_path);
 
-    spawn_details_updater(player_db_path.to_owned());
+    info!("SERVER: http://{bind_addr}");
 
-    println!("SERVER: https://{addr}");
-    println!("  /api/tracks");
-    println!("  /api/games");
-    println!("  /api/game/tracks?appid=<id>");
-    println!("  /api/search/games[?name=<n>]");
-    println!("  /api/search/tracks?appid=<id>");
-    println!("  /api/random/track[?count=N][&vlc]");
-    println!("  /api/random/game/music[?count=N][&vlc]");
-    println!("  /api/nowplaying");
-    println!("  /cdn.media/id/:file_id/appid/:appid/:file_name");
-
-    axum_server::bind_rustls(addr, tls)
-        .serve(app.into_make_service())
-        .await
-        .unwrap_or_else(|e| eprintln!("SERVER error: {e}"));
+    if let Err(e) = axum::serve(listener, app).await {
+        error!("SERVER error: {e}");
+    }
 }

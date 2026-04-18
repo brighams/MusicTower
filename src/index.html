@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Starkeeper Media</title>
+<title>Starkeeper Music</title>
+<link rel="icon" type="image/png" href="starkeeper-128-logo.png">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -149,8 +150,7 @@ tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
 
 <div id="now-playing">
   <div id="np-inner">
-  <button id="np-popout" onclick="openPopout()" title="Pop out player">⧉</button>
-  <div id="np-bar">
+<div id="np-bar">
     <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
     <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
     <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
@@ -181,6 +181,8 @@ tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
 </div>
 
 <script>
+const API = 'http://localhost:8086'
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
@@ -245,13 +247,6 @@ const togglePlayPause = () => {
   if (AUDIO.paused) { AUDIO.play() } else { AUDIO.pause() }
 }
 
-let popupWin = null
-const openPopout = () => {
-  if (popupWin && !popupWin.closed) { popupWin.focus(); return }
-  popupWin = window.open('/popup', 'skplayer',
-    'popup,width=540,height=110,resizable=yes')
-}
-
 const toggleRandom = () => {
   randomMode = !randomMode
   document.getElementById('np-random').classList.toggle('active', randomMode)
@@ -264,8 +259,8 @@ const playRandom = async () => {
   const scanType = ALL_ST_ALBUMS.includes(album) ? 'music' : 'files'
   const prefix = scanType === 'music' ? 'st' : 'dm'
   const albumId = prefix + '_' + encodeURIComponent(album.title).replace(/'/g, '%27')
-  const urlFn = t => `/media/${t.file_id}`
-  const tracks = await fetch(`/api/album/tracks?title=${encodeURIComponent(album.title)}&scan_type=${scanType}`).then(r => r.json())
+  const urlFn = t => `${API}/media/${t.file_id}`
+  const tracks = await fetch(`${API}/api/album/tracks?title=${encodeURIComponent(album.title)}&scan_type=${scanType}`).then(r => r.json())
   if (!tracks.length) return
   const types = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
   if (!TRACK_REG[albumId]) {
@@ -392,11 +387,22 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
 
 // ── page build ────────────────────────────────────────────────────────────────
 
+const wait = ms => new Promise(r => setTimeout(r, ms))
+
+const fetch_retry = async (url, attempts = 20, delay = 500) => {
+  for (let i = 0; i < attempts; i++) {
+    try { return await fetch(url) } catch (_) {}
+    document.getElementById('summary').textContent = `connecting to server… (${i + 1})`
+    await wait(delay)
+  }
+  throw new Error('server unavailable')
+}
+
 async function load() {
   const [sumRes, stRes, dmRes] = await Promise.all([
-    fetch('/api/summary'),
-    fetch('/api/albums?scan_type=music'),
-    fetch('/api/albums?scan_type=files'),
+    fetch_retry(`${API}/api/summary`),
+    fetch_retry(`${API}/api/albums?scan_type=music`),
+    fetch_retry(`${API}/api/albums?scan_type=files`),
   ])
   const sum    = await sumRes.json()
   const stList = await stRes.json()
@@ -476,8 +482,8 @@ async function toggleAlbum(row) {
   if (!open || panel.dataset.loaded) return
   panel.dataset.loaded = '1'
 
-  const urlFn  = t => `/media/${t.file_id}`
-  const base   = `/api/album/tracks?title=${encodeURIComponent(title)}&scan_type=${scanType}`
+  const urlFn  = t => `${API}/media/${t.file_id}`
+  const base   = `${API}/api/album/tracks?title=${encodeURIComponent(title)}&scan_type=${scanType}`
   const tracks = await fetch(base).then(r => r.json())
   const types  = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
 
