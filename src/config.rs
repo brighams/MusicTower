@@ -7,11 +7,35 @@ pub struct Config {
     pub media_types: Option<String>,
     pub media_type: Option<Vec<String>>,
     pub db_file: String,
+    pub player_db: Option<String>,
+    pub steam_details_db: Option<String>,
     pub scan_roots: Vec<String>,
     pub steam_dir: Option<String>,
 }
 
 impl Config {
+    pub fn player_db_path(&self) -> String {
+        self.player_db.clone().unwrap_or_else(|| {
+            Path::new(&self.db_file)
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join("player.db")
+                .to_string_lossy()
+                .into_owned()
+        })
+    }
+
+    pub fn steam_details_db_path(&self) -> String {
+        self.steam_details_db.clone().unwrap_or_else(|| {
+            Path::new(&self.db_file)
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join("steam_details.db")
+                .to_string_lossy()
+                .into_owned()
+        })
+    }
+
     pub fn extensions(&self) -> Vec<String> {
         if let Some(list) = &self.media_type {
             return list

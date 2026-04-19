@@ -47,7 +47,8 @@ async fn main() {
 
     println!("STEAM SCANNER: config loaded from {config_path}");
 
-    let player_db = database::player_db_path(&cfg.db_file);
+    let player_db = cfg.player_db_path();
+    let steam_details_db = cfg.steam_details_db_path();
 
     let mut conn = database::backup_and_init(&cfg.db_file).unwrap_or_else(|e| {
         eprintln!("ERROR: failed to init database: {e}");
@@ -79,13 +80,13 @@ async fn main() {
             if let Err(e) = database::insert_owned_apps(&mut conn, &owned) {
                 eprintln!("DB: failed to insert owned apps: {e}");
             }
-            match database::open_player_db(&player_db) {
+            match database::open_player_db(&steam_details_db) {
                 Ok(pconn) => {
                     if let Err(e) = database::sync_owned_to_player_db(&pconn, &owned) {
-                        eprintln!("DB: failed to sync to player.db: {e}");
+                        eprintln!("DB: failed to sync to steam_details.db: {e}");
                     }
                 }
-                Err(e) => eprintln!("DB: failed to open player.db: {e}"),
+                Err(e) => eprintln!("DB: failed to open steam_details.db: {e}"),
             }
         }
         Err(e) => eprintln!("STEAM: skipping owned games ({e})"),
@@ -107,12 +108,16 @@ async fn main() {
 
     drop(conn);
 
+    if let Err(e) = database::init_player_db(&player_db) {
+        eprintln!("DB: failed to init player.db: {e}");
+    }
+
     println!(
         "STEAM SCANNER: scan done in {:.3}s",
         start.elapsed().as_secs_f64()
     );
 
     if !serve_bind.is_empty() {
-        server::start(&serve_bind, &cfg.db_file, &player_db, &extensions).await;
+        server::start(&serve_bind, &cfg.db_file, &player_db, &steam_details_db, &extensions).await;
     }
 }

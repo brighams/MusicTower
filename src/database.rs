@@ -79,7 +79,9 @@ fn create_schema(conn: &Connection) -> Result<()> {
             file_name TEXT NOT NULL,
             size INTEGER NOT NULL,
             modified INTEGER NOT NULL,
-            created INTEGER NOT NULL
+            created INTEGER NOT NULL,
+            join_key TEXT,
+            album_key TEXT
         );
         CREATE INDEX idx_steam_apps_appid ON steam_apps (appid);
         CREATE INDEX idx_steam_apps_name ON steam_apps (name);
@@ -88,7 +90,9 @@ fn create_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX idx_steam_files_media_type ON steam_files (media_type);
         CREATE INDEX idx_steam_files_title ON steam_files (title);
         CREATE INDEX idx_steam_files_file_name ON steam_files (file_name);
-        CREATE INDEX idx_steam_files_appid ON steam_files (appid);",
+        CREATE INDEX idx_steam_files_appid ON steam_files (appid);
+        CREATE INDEX idx_steam_files_join_key ON steam_files (join_key);
+        CREATE INDEX idx_steam_files_album_key ON steam_files (album_key);",
     )
 }
 
@@ -184,7 +188,7 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?)",
         )?;
 
         for (i, (path, scan_root)) in files.iter().enumerate() {
@@ -215,6 +219,10 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
             let appid = owned_map.get(&title_lower)
                 .or_else(|| apps_map.get(&title_lower))
                 .cloned();
+
+            let appid_str = appid.as_deref().unwrap_or("0");
+            let join_key = format!("{appid_str}-{title}-{file_name}");
+            let album_key = format!("{appid_str}-{title}");
 
             let norm_root = scan_root.trim_end_matches(['/', '\\']).replace('\\', "/");
             let scan_type = if norm_root.ends_with("steamapps/music") {
@@ -247,6 +255,8 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 size,
                 modified,
                 created,
+                join_key,
+                album_key,
             ])?;
 
             if (i + 1) % 10_000 == 0 {
@@ -265,10 +275,27 @@ fn millis_since_epoch(t: SystemTime) -> i64 {
         .unwrap_or(0)
 }
 
-pub fn player_db_path(scanner_db: &str) -> String {
-    let path = Path::new(scanner_db);
-    let dir = path.parent().unwrap_or(Path::new("."));
-    dir.join("player.db").to_string_lossy().into_owned()
+pub fn init_player_db(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let p = Path::new(path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let conn = Connection::open(path)?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         CREATE TABLE IF NOT EXISTS track_stats (
+             join_key  TEXT PRIMARY KEY,
+             rating    INTEGER NOT NULL DEFAULT 0,
+             play_count INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS album_stats (
+             album_key TEXT PRIMARY KEY,
+             rating    INTEGER NOT NULL DEFAULT 0
+         );",
+    )?;
+    println!("DB: player.db initialized at {path}");
+    Ok(())
 }
 
 pub fn open_player_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
@@ -298,7 +325,7 @@ pub fn open_player_db(path: &str) -> Result<Connection, Box<dyn std::error::Erro
              developer        TEXT
          );",
     )?;
-    println!("DB: player.db opened at {path}");
+    println!("DB: steam_details.db opened at {path}");
     Ok(conn)
 }
 
@@ -308,6 +335,6 @@ pub fn sync_owned_to_player_db(conn: &Connection, apps: &[OwnedApp]) -> Result<(
     for app in apps {
         stmt.execute(params![app.appid, app.name])?;
     }
-    println!("DB: Synced {} owned apps to player.db", apps.len());
+    println!("DB: Synced {} owned apps to steam_details.db", apps.len());
     Ok(())
 }

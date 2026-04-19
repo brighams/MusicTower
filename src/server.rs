@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
@@ -86,24 +86,38 @@ const GAMES_ALL: &str = "
     ORDER BY name";
 
 const ALBUMS_LIST: &str = "
-    SELECT title,
-           COUNT(*)                          AS track_count,
-           GROUP_CONCAT(DISTINCT media_type) AS types
-    FROM steam_files
-    WHERE (:scan_type IS NULL OR scan_type = :scan_type)
-    GROUP BY title
-    ORDER BY title";
+    SELECT sf.title,
+           COUNT(*)                               AS track_count,
+           GROUP_CONCAT(DISTINCT sf.media_type)   AS types,
+           MIN(sf.album_key)                      AS album_key,
+           COALESCE(ast.rating, 0)                AS album_rating,
+           COALESCE(SUM(ts.play_count), 0)        AS album_play_count
+    FROM steam_files sf
+    LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
+    LEFT JOIN pdb.track_stats  ts  ON ts.join_key  = sf.join_key
+    WHERE (:scan_type IS NULL OR sf.scan_type = :scan_type)
+    GROUP BY sf.title
+    ORDER BY sf.title";
 
 const ALBUM_FILE_TRACKS: &str = "
-    SELECT id AS file_id, media_type, title, dir_path, full_path, file_name, size, modified, created
-    FROM steam_files
-    WHERE title = :title
-      AND (:type IS NULL OR UPPER(media_type) = UPPER(:type))
-      AND (:scan_type IS NULL OR scan_type = :scan_type)
-    ORDER BY file_name";
+    SELECT sf.id AS file_id, sf.media_type, sf.title, sf.dir_path, sf.full_path,
+           sf.file_name, sf.size, sf.modified, sf.created,
+           sf.join_key, sf.album_key,
+           COALESCE(ts.rating,     0) AS rating,
+           COALESCE(ts.play_count, 0) AS play_count
+    FROM steam_files sf
+    LEFT JOIN pdb.track_stats ts ON ts.join_key = sf.join_key
+    WHERE sf.title = :title
+      AND (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
+      AND (:scan_type IS NULL OR sf.scan_type = :scan_type)
+    ORDER BY sf.file_name";
 
-const RANDOM_ALBUMS: &str =
-    "SELECT DISTINCT title FROM steam_files WHERE (:type IS NULL OR UPPER(media_type) = UPPER(:type))";
+const RANDOM_ALBUMS: &str = "
+    SELECT DISTINCT sf.title
+    FROM steam_files sf
+    LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
+    WHERE (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
+      AND COALESCE(ast.rating, 0) >= 0";
 
 const ALBUM_TRACKS: &str = "
     SELECT steam_apps.*, steam_files.*,
@@ -111,6 +125,8 @@ const ALBUM_TRACKS: &str = "
     FROM steam_apps
     JOIN steam_files ON steam_apps.installdir = steam_files.title
         AND steam_files.title = :album_title
+    LEFT JOIN pdb.track_stats ts ON ts.join_key = steam_files.join_key
+    WHERE COALESCE(ts.rating, 0) >= 0
     ORDER BY steam_files.file_name";
 
 const TRACK_BY_ID: &str = "
@@ -378,11 +394,19 @@ async fn serve_media(State(s): State<AppState>, Path(file_id): Path<i64>) -> Res
         let db = s.db.lock().unwrap();
         match run_query_one(
             &db,
-            "SELECT id AS file_id, full_path, file_name, media_type, title FROM steam_files WHERE id = :id",
+            "SELECT id AS file_id, full_path, file_name, media_type, title, join_key FROM steam_files WHERE id = :id",
             rusqlite::named_params! { ":id": file_id },
         ) {
             Some(t) => {
                 let fp = t["full_path"].as_str().unwrap_or("").to_owned();
+                let jk = t.get("join_key").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+                if !jk.is_empty() {
+                    db.execute(
+                        "INSERT INTO pdb.track_stats (join_key, play_count) VALUES (?1, 1)
+                         ON CONFLICT(join_key) DO UPDATE SET play_count = play_count + 1",
+                        params![jk],
+                    ).ok();
+                }
                 *s.now_playing.lock().unwrap() = Some(t);
                 fp
             }
@@ -492,6 +516,33 @@ async fn api_random_track(State(s): State<AppState>, Query(q): Query<RandomQuery
     }
 }
 
+// ── ratings ───────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RatingBody {
+    key: String,
+    rating: i64,
+    kind: String,
+}
+
+async fn api_set_rating(State(s): State<AppState>, Json(body): Json<RatingBody>) -> StatusCode {
+    let db = s.db.lock().unwrap();
+    let result = if body.kind == "album" {
+        db.execute(
+            "INSERT INTO pdb.album_stats (album_key, rating) VALUES (?1, ?2)
+             ON CONFLICT(album_key) DO UPDATE SET rating = ?2",
+            params![body.key, body.rating],
+        )
+    } else {
+        db.execute(
+            "INSERT INTO pdb.track_stats (join_key, rating) VALUES (?1, ?2)
+             ON CONFLICT(join_key) DO UPDATE SET rating = ?2",
+            params![body.key, body.rating],
+        )
+    };
+    if result.is_ok() { StatusCode::OK } else { StatusCode::INTERNAL_SERVER_ERROR }
+}
+
 // ── CDN ───────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -542,6 +593,14 @@ async fn cdn_serve(State(s): State<AppState>, Path(p): Path<CdnParams>) -> Respo
         match lookup_track(&db, &p) {
             Some((t, m)) => {
                 let fp = t["full_path"].as_str().unwrap_or("").to_owned();
+                let jk = t.get("join_key").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+                if !jk.is_empty() {
+                    db.execute(
+                        "INSERT INTO pdb.track_stats (join_key, play_count) VALUES (?1, 1)
+                         ON CONFLICT(join_key) DO UPDATE SET play_count = play_count + 1",
+                        params![jk],
+                    ).ok();
+                }
                 (t, m, fp)
             }
             None => {
@@ -578,12 +637,12 @@ fn mark_app_detail_error(conn: &Connection, appid: &str) -> Result<(), rusqlite:
     Ok(())
 }
 
-fn spawn_details_updater(player_db_path: String) {
+fn spawn_details_updater(steam_details_db: String) {
     std::thread::spawn(move || {
-        let conn = match rusqlite::Connection::open(&player_db_path) {
+        let conn = match rusqlite::Connection::open(&steam_details_db) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("DETAILS: failed to open player.db: {e}");
+                eprintln!("DETAILS: failed to open steam_details.db: {e}");
                 return;
             }
         };
@@ -744,7 +803,7 @@ fn ensure_certs(cert_path: &str, key_path: &str) {
 
 // ── startup ───────────────────────────────────────────────────────────────────
 
-pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_type_order: &[String]) {
+pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_details_db: &str, media_type_order: &[String]) {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .ok();
@@ -760,6 +819,9 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
     });
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
         .ok();
+    let player_db_escaped = player_db.replace('\'', "''");
+    conn.execute_batch(&format!("ATTACH DATABASE '{player_db_escaped}' AS pdb;"))
+        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach player.db: {e}"));
 
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
@@ -787,6 +849,7 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
         .route("/api/nowplaying", get(api_now_playing))
         .route("/api/random/track", get(api_random_track))
         .route("/api/random/game/music", get(api_random_track))
+        .route("/api/rating", post(api_set_rating))
         .route(
             "/api/validate/cdn.media/id/{file_id}/appid/{appid}/{file_name}",
             get(cdn_validate),
@@ -808,7 +871,7 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db_path: &str, media_t
         std::process::exit(1);
     });
 
-    spawn_details_updater(player_db_path.to_owned());
+    spawn_details_updater(steam_details_db.to_owned());
 
     println!("SERVER: https://{addr}");
     println!("  /api/tracks");

@@ -40,7 +40,7 @@ To use the built in web client you will need to accept the test certificate.
 - Built-in web player with track queueing, auto-advance, and per-album media-type filtering
 - Download a filtered VLC-compatible XSPF playlist for any album with one click
 - REST API so external players can query and stream your library
-- Two persistent databases: `starkeeper.db` (rebuilt on every scan) and `player.db` (persists metadata and state across scans)
+- Two persistent databases: `starkeeper.db` (rebuilt on every scan) and `steam_details.db` (persists metadata and state across scans)
 
 ---
 
@@ -174,7 +174,7 @@ All responses are JSON. The base URL is `https://127.0.0.1:8086` by default.
 
 **`starkeeper.db`** is recreated on every run. It holds the full scan results: Steam app metadata, owned games, and indexed file paths. Previous copies are renamed `_0001_starkeeper.db`, `_0002_starkeeper.db`, etc. before each run.
 
-**`player.db`** persists across runs. It holds Steam app details fetched from the API and is used to enrich metadata without re-fetching on every scan.
+**`steam_details.db`** persists across runs. It holds Steam app details fetched from the API and is used to enrich metadata without re-fetching on every scan.
 
 ---
 

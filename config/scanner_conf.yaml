@@ -1,4 +1,6 @@
 db_file: media/starkeeper.db
+player_db: media/player.db
+steam_details_db: media/steam_details.db
 media_type:
   - mp3
   - ogg

@@ -21,3 +21,4 @@ target
 
 media/
 .secrets
+*.log
