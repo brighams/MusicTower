@@ -927,7 +927,10 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_detail
         std::process::exit(1);
     });
 
-    spawn_details_updater(steam_details_db.to_owned());
+    // ======================
+    // disabled for now
+    // spawn_details_updater(steam_details_db.to_owned());
+    // ======================
 
     println!("SERVER: https://{addr}");
     println!("  /api/tracks");
