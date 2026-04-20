@@ -1,4 +1,5 @@
 const INDEX_HTML: &str = include_str!("index.html");
+const COLORS_JS: &str = include_str!("colors.js");
 
 use axum::{
     body::Body,
@@ -337,6 +338,10 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
 
 async fn serve_index() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], INDEX_HTML)
+}
+
+async fn serve_colors_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], COLORS_JS)
 }
 
 
@@ -886,6 +891,7 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_detail
 
     let app = Router::new()
         .route("/", get(serve_index))
+        .route("/colors.js", get(serve_colors_js))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))

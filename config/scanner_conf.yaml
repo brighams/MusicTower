@@ -6,17 +6,9 @@ media_type:
   - ogg
   - oga
   - opus
-  - m4a
-  - webm
-  - aiff
   - flac
+  - webm
   - wav
-  - aac
-  - midi
-  - mid
-  - mp4
+  - m4a
+  - aiff
 scan_roots:
-  - $HOME/.steam/steam/steamapps/music/
-  - $HOME/.steam/steam/steamapps/common/
-  - /var/mnt/SteamExt4/SteamLibrary/steamapps/music/
-  - /var/mnt/SteamExt4/SteamLibrary/steamapps/common/

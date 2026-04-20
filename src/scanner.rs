@@ -7,7 +7,7 @@ pub fn scan_all(roots: &[String], extensions: &[String]) -> Vec<(PathBuf, String
         .par_iter()
         .flat_map(|root| {
             if !std::path::Path::new(root).exists() {
-                eprintln!("SCANNER: WARNING: scan root does not exist, skipping: {root}");
+                eprintln!("SCANNER: WARNING: scan root does not exist, skipping: {root}\n");
                 return vec![];
             }
             println!("SCANNER: Scanning {root}");

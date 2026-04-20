@@ -680,9 +680,14 @@ let audio_ctx = null
 let analyser   = null
 let viz_raf    = null
 let viz_start  = null
-let beat       = 0
-let prev_bass  = 0
-let last_beat_t = 0
+let beat          = 0
+let prev_bass     = 0
+let last_beat_t   = 0
+let viz_mode_at   = 0
+let viz_mode_secs = 0
+
+const VIZ_DURATIONS = [2, 4, 8]
+const pick_viz_duration = () => VIZ_DURATIONS[Math.floor(Math.random() * VIZ_DURATIONS.length)]
 
 const ensure_audio_ctx = () => {
   if (audio_ctx) return
@@ -701,31 +706,27 @@ const freq_avg = (lo, hi) => {
   return s / ((hi - lo) * 255)
 }
 
-const PAL_TEX_SIZE = 128
-
-const fetch_palette = async (img_url) => {
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = img_url })
-  const c = document.createElement('canvas')
-  c.width = c.height = PAL_TEX_SIZE
-  const ctx = c.getContext('2d')
-  ctx.drawImage(img, 0, 0, PAL_TEX_SIZE, PAL_TEX_SIZE)
-  return ctx.getImageData(0, 0, PAL_TEX_SIZE, PAL_TEX_SIZE).data
-}
-
 const MODE_COUNT = 5
 
-const on_track_change = async () => {
-  const mode = Math.floor(Math.random() * MODE_COUNT)
+let _palette_cache = null
+const get_palette = async () => {
+  if (_palette_cache) return _palette_cache
+  const { colors } = await import('/colors.js')
+  const d = new Uint8Array(colors.length * 4)
+  for (const [i, hex] of colors.entries()) {
+    const c = hex.replace('#', '')
+    d[i*4]   = parseInt(c.slice(0, 2), 16)
+    d[i*4+1] = parseInt(c.slice(2, 4), 16)
+    d[i*4+2] = parseInt(c.slice(4, 6), 16)
+    d[i*4+3] = c.length === 8 ? parseInt(c.slice(6, 8), 16) : 255
+  }
+  _palette_cache = { data: Array.from(d), w: colors.length, h: 1 }
+  return _palette_cache
+}
+
+const on_track_change = () => {
   const t = viz_start ? (performance.now() - viz_start) / 1000 : 0
-  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, mode, time: t }, '*')
-  const img_url = TRACK_REG[player.albumId]?.capsule_image
-  if (!img_url) return
-  try {
-    const palette = await fetch_palette(img_url)
-    VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: Array.from(palette), pal_w: PAL_TEX_SIZE, pal_h: PAL_TEX_SIZE }, '*')
-  } catch (_) {}
+  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, mode: Math.floor(Math.random() * MODE_COUNT), time: t }, '*')
 }
 
 const start_viz = () => {
@@ -734,7 +735,11 @@ const start_viz = () => {
   if (!viz_start) viz_start = performance.now()
   VIZ_IFRAME.style.opacity = '1'
   document.body.style.background = BODY_BG_VIZ
+  get_palette().then(p => {
+    VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: p.data, pal_w: p.w, pal_h: p.h }, '*')
+  })
   if (viz_raf) return
+  viz_mode_at = 0; viz_mode_secs = pick_viz_duration()
   const tick = () => {
     viz_raf = requestAnimationFrame(tick)
     analyser.getByteFrequencyData(freq_data)
@@ -746,6 +751,11 @@ const start_viz = () => {
     if (raw_bass > prev_bass * 1.35 && raw_bass > 0.15 && t - last_beat_t > 0.1) {
       beat = 1.0
       last_beat_t = t
+    }
+    if (viz_mode_secs > 0 && t - viz_mode_at >= viz_mode_secs) {
+      viz_mode_at = t
+      viz_mode_secs = pick_viz_duration()
+      VIZ_IFRAME.contentWindow?.postMessage({ viz: true, mode: Math.floor(Math.random() * MODE_COUNT), time: t }, '*')
     }
     beat     *= 0.88
     prev_bass = prev_bass * 0.8 + raw_bass * 0.2
@@ -765,7 +775,7 @@ const start_viz = () => {
 
 const stop_viz = () => {
   if (viz_raf) { cancelAnimationFrame(viz_raf); viz_raf = null }
-  beat = 0; prev_bass = 0
+  beat = 0; prev_bass = 0; viz_mode_at = 0; viz_mode_secs = 0
   VIZ_IFRAME.style.opacity = '0'
   document.body.style.background = BODY_BG_DEFAULT
 }
