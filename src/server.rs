@@ -2,6 +2,7 @@ const INDEX_HTML: &str = include_str!("index.html");
 const LOADING_HTML: &str = include_str!("loading.html");
 const COLORS_JS: &str = include_str!("colors.js");
 const LOGO_SVG: &str = include_str!("logo.svg");
+const STYLES_CSS: &str = include_str!("styles.css");
 
 use axum::{
     body::Body,
@@ -363,6 +364,22 @@ async fn serve_colors_js() -> impl IntoResponse {
 
 async fn serve_logo_svg() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO_SVG)
+}
+
+fn ensure_styles_css() {
+    let path = std::path::Path::new("media/styles.css");
+    if !path.exists() {
+        if let Err(e) = std::fs::write(path, STYLES_CSS) {
+            eprintln!("SERVER: failed to write media/styles.css: {e}");
+        } else {
+            println!("SERVER: wrote default media/styles.css");
+        }
+    }
+}
+
+async fn serve_styles_css() -> impl IntoResponse {
+    let css = std::fs::read_to_string("media/styles.css").unwrap_or_else(|_| STYLES_CSS.to_owned());
+    ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], css)
 }
 
 
@@ -896,6 +913,7 @@ pub async fn start(
     const KEY: &str = ".secrets/key.pem";
 
     ensure_certs(CERT, KEY);
+    ensure_styles_css();
 
     let state = AppState {
         db,
@@ -914,6 +932,7 @@ pub async fn start(
         .route("/api/status", get(api_status))
         .route("/colors.js", get(serve_colors_js))
         .route("/logo.svg", get(serve_logo_svg))
+        .route("/styles.css", get(serve_styles_css))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))
