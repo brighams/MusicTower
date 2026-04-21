@@ -10,17 +10,16 @@ body {
   background: linear-gradient(160deg, #0e0820 0%, #160d30 50%, #0c0618 100%);
   min-height: 100vh;
 }
-h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 2px;
-     text-shadow: 0 0 16px rgba(232,192,64,0.35); }
-#summary {
-  margin-bottom: 20px; color: #b090d8; padding-left: 12px;
-  border-left: 3px solid #6030a0;
+#footer {
+  margin-top: 40px; padding: 12px 16px;
+  color: #4a2870; font-size: 0.78em;
+  border-top: 1px solid #2a1450;
 }
-#summary strong { color: #d0a8ff; }
+#footer strong { color: #6040a0; }
 
 /* ── now playing (deep vivid) ──────────────────────────────────────── */
 #now-playing {
-  display: none; margin-bottom: 20px; padding: 10px 16px;
+  display: block; margin-bottom: 20px; padding: 10px 16px;
   background: linear-gradient(160deg, #1a0035 0%, #2e0055 55%, #180030 100%);
   border-left: 4px solid #c060f0;
   box-shadow: 0 0 24px rgba(160,0,255,0.25), 0 2px 8px rgba(0,0,0,0.6);
@@ -43,6 +42,7 @@ h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 2px;
 .np-btn.active { background: rgba(200,50,255,0.18); border-color: #e060f8; color: #f080ff;
   box-shadow: 0 0 12px rgba(220,60,255,0.5); }
 #np-stop:hover { border-color: #f86090; color: #ff80a8; box-shadow: 0 0 8px rgba(255,60,100,0.35); }
+#np-fullscreen { font-size: 1.1em; padding: 1px 6px; }
 #np-volume { width: 90px; cursor: pointer; flex-shrink: 0; accent-color: #c060f0; vertical-align: middle; opacity: 0.85; }
 #np-volume:hover { opacity: 1; }
 #np-track { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding-left: 8px; border-left: 1px solid #4a1070; }
@@ -66,7 +66,7 @@ h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 2px;
 #np-tracks tr.playing .play-btn { color: #e060f8; }
 
 /* ── filter ──────────────────────────────────────────────────────── */
-.filter-row { margin-bottom: 20px; }
+.filter-row { display: flex; justify-content: flex-end; margin-top: 0.25em; }
 .filter-row input {
   background: #1a0d30; border: 1px solid #4a2878; color: #d0b8f0;
   padding: 4px 10px; width: 300px; font: inherit; border-radius: 3px;
@@ -208,22 +208,20 @@ body { position: relative; z-index: 1; }
 </style>
 </head>
 <body>
-<h1>⭐ MusicTower</h1>
-<div id="summary" class="msg">loading…</div>
-
 <audio id="audio-player"></audio>
 <iframe id="visualizer"></iframe>
 
 <div id="now-playing">
   <div id="np-top">
-    <button class="np-btn" id="np-expand" onclick="toggleNpExpand()" title="Expand / Collapse">▾</button>
+    <button class="np-btn" id="np-expand" onclick="toggleNpExpand()" title="Expand / Collapse">▸</button>
     <div id="np-track">
       <span id="np-label">Now Playing</span>
       <span id="np-filename">—</span>
     </div>
     <span id="np-album"></span>
+    <button class="np-btn" id="np-fullscreen" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
   </div>
-  <div id="np-body">
+  <div id="np-body" style="display:none">
     <div id="np-bar">
       <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
       <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
@@ -233,11 +231,10 @@ body { position: relative; z-index: 1; }
               oninput="AUDIO.volume=this.value" title="Volume">
     </div>
     <div id="np-tracks"></div>
+    <div class="filter-row">
+      <input id="search" type="text" placeholder="filter by name…" oninput="filterAll(this.value)">
+    </div>
   </div>
-</div>
-
-<div class="filter-row">
-  <input id="search" type="text" placeholder="filter by name…" oninput="filterAll(this.value)">
 </div>
 
 <div class="section">
@@ -249,6 +246,8 @@ body { position: relative; z-index: 1; }
   <h2 onclick="toggleSection(this)"><span class="section-arrow">▾</span>Discovered Media <small id="dm-count"></small></h2>
   <div id="media" class="section-body"><span class="msg">loading…</span></div>
 </div>
+
+<div id="footer" class="msg">loading…</div>
 
 <script>
 function esc(s) {
@@ -428,10 +427,6 @@ const playFrom = (albumId, fileId) => {
 const stopPlayback = () => {
   AUDIO.pause()
   AUDIO.src = ''
-  player.albumId = null
-  player.tracks  = []
-  player.idx     = -1
-  document.getElementById('now-playing').style.display = 'none'
   stop_viz()
   refreshHighlight()
 }
@@ -498,7 +493,6 @@ const playBtnClick = (btn) => {
   if (track && (track.rating ?? 0) < 0) {
     AUDIO.src = reg.urlFn(track)
     AUDIO.play()
-    document.getElementById('now-playing').style.display = 'block'
     document.getElementById('np-filename').textContent = track.file_name
     return
   }
@@ -518,8 +512,9 @@ gl.clearColor(0,0,0,1);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE)
 
 const VERT='attribute vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}'
 const PAL='vec3 pal(float t,sampler2D s){t=fract(t);return texture2D(s,vec2(t,t)).rgb;}'
+const HASH='float hash(vec2 p){p=fract(p*vec2(443.897,441.423));p+=dot(p,p.yx+19.19);return fract(p.x*p.y);}'
 
-const FRAGS=[\`precision mediump float;
+const FRAGS_A=[\`precision mediump float;
 uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
 uniform sampler2D u_palette,u_wave,u_freq;
 \${PAL}
@@ -590,15 +585,67 @@ void main(){
   vec2 p=uv*(1.5+u_mid)+t;
   float d=.5+.5*sin(fbm(p+fbm(p+fbm(p)))*6.28318+u_bass*3.+t*2.);
   float d2=.5+.5*cos(fbm(p*1.5+u_treble*.5+3.7)*6.28318-t);
-  gl_FragColor=vec4((pal(d,u_palette)*.7+pal(d2,u_palette)*.3)*e,1.);
+  gl_FragColor=vec4((pal(d,u_palette)*.7+pal(d2,u_palette)*.3)*e,u_alpha);
+}\`]
+
+const FRAGS_B=[\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+\${HASH}
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res;
+  float ar=u_res.x/u_res.y,t=u_time;
+  vec3 col=vec3(0.);
+  for(int i=0;i<7;i++){
+    float fi=float(i),depth=(fi+1.)/7.,ybase=.08+fi*.125;
+    float f1=(2.+fi*.9)*6.28318,f2=(.8+fi*.4)*6.28318,spd=.35+fi*.12;
+    float amp=(.03+u_bass*.11)*depth;
+    float wy=ybase+sin(uv.x*f1+t*spd+u_mid*2.)*amp+sin(uv.x*f2-t*spd*.7)*amp*.4;
+    float dd=abs(uv.y-wy),w=.0018+depth*.0025+u_bass*.002;
+    col+=pal(ybase*.5+t*.04+fi*.07,u_palette)*exp(-dd/w)*depth*(.5+u_bass*.5+u_beat*.4);
+    float sdens=6.+fi*1.5,sx=floor(uv.x*sdens);
+    float spt=fract(t*(.7+fi*.1)+hash(vec2(sx,fi)));
+    float slife=smoothstep(0.,.2,spt)*smoothstep(1.,.4,spt);
+    float sact=step(.3+u_bass*.25,hash(vec2(sx,fi+17.)));
+    float scx=(sx+.5)/sdens;
+    float scy=ybase+sin(scx*f1+t*spd+u_mid*2.)*amp+sin(scx*f2-t*spd*.7)*amp*.4;
+    float spx=scx+(hash(vec2(sx+200.,fi))-.5)*.09*spt;
+    float spy=scy+(hash(vec2(sx+100.,fi))-.5)*.28*spt;
+    float ddx=(uv.x-spx)*ar,ddy=uv.y-spy;
+    float sg=exp(-sqrt(ddx*ddx+ddy*ddy)/(.005*(1.+u_beat*.7)))*slife*sact*(1.+u_bass*.6);
+    col+=pal(ybase+.35+fi*.05,u_palette)*sg*2.5;
+  }
+  gl_FragColor=vec4(col,u_alpha);
+}\`,\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  float ar=u_res.x/u_res.y;
+  vec2 uv=vec2(gl_FragCoord.x/u_res.x*ar,gl_FragCoord.y/u_res.y);
+  float t=u_time;
+  vec3 col=vec3(0.);
+  for(int fi=0;fi<4;fi++){
+    float f=float(fi),ph=f*1.618+1.234,ph2=f*2.397+0.813,spd=0.55+f*0.21;
+    vec3 fly_col=pal(f*.25+t*.02,u_palette)*3.;
+    for(int s=0;s<24;s++){
+      float age=float(s)/24.,ts=t-age*3.5*(.5+u_bass*.5);
+      float px=(.5+.38*cos(ts*spd+ph)+.1*cos(ts*spd*2.7+ph2))*ar;
+      float py=.5+.32*sin(ts*(spd*.73)+ph*.8)+.1*sin(ts*(spd*1.9)+ph2*.6)+u_bass*.05*sin(ts*2.8+f);
+      vec2 dv=uv-vec2(px,py);
+      float r=.014*(1.+u_beat*.5)*(1.-age*.72)*(1.+u_bass*.35);
+      float b=exp(-dot(dv,dv)/(r*r))*(1.-age)*(1.-age);
+      col+=fly_col*b*(1.+u_beat*(1.-age)*1.5);
+    }
+  }
+  gl_FragColor=vec4(col,u_alpha);
 }\`]
 
 const compile=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(s));return s}
-
 const quad=(()=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);return b})()
-
 const build_prog=src=>{
   const p=gl.createProgram()
   gl.attachShader(p,compile(gl.VERTEX_SHADER,VERT));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,src))
@@ -610,22 +657,18 @@ const build_prog=src=>{
   return{p,Ut:U('u_time'),Ub:U('u_bass'),Um:U('u_mid'),Utr:U('u_treble'),Ube:U('u_beat'),
          Ur:U('u_res'),Up:U('u_palette'),Uw:U('u_wave'),Uf:U('u_freq'),Ua:U('u_alpha')}
 }
-
 const mk_tex=(w,h,d)=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,d);return t}
-
 const dflt_pal=()=>{const d=new Uint8Array(256);
   for(let i=0;i<64;i++){const t=i/63;d[i*4]=(t*180+10)|0;d[i*4+1]=(t*20)|0;d[i*4+2]=(t*230+25)|0;d[i*4+3]=255}
   return d}
-
 const pal_tex =mk_tex(8,8,dflt_pal())
 const wave_tex=mk_tex(256,1,new Uint8Array(1024).fill(128))
 const freq_tex=mk_tex(128,1,new Uint8Array(512).fill(0))
-
 const up_gray=(tex,w,h,src)=>{
   const d=new Uint8Array(w*h*4)
   for(let i=0;i<w*h;i++){const v=src[i]??128;d[i*4]=d[i*4+1]=d[i*4+2]=v;d[i*4+3]=255}
@@ -633,14 +676,23 @@ const up_gray=(tex,w,h,src)=>{
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,d)
 }
 
-const PROGS=FRAGS.map(build_prog)
-let mode=0,bass=0,mid=0,treble=0,beat=0,viz_time=0
-let prog=PROGS[0]
-let next_prog=null,fade_start=0
-const FADE_SECS=1.5
+const PROGS_A=FRAGS_A.map(build_prog)
+const PROGS_B=FRAGS_B.map(build_prog)
+let bass=0,mid=0,treble=0,beat=0,viz_time=0
+const FADE=1.5
+const DURS=[[6,8,12],[2,4,8],[16]]
+const ALPHAS=[.55,.45,.38]
+const ns=()=>performance.now()/1000
+const rnd=(n,x=-1)=>{if(n<=1)return 0;let r;do{r=Math.floor(Math.random()*n)}while(r===x);return r}
+const pdur=(d)=>d[Math.floor(Math.random()*d.length)]
+const layers=[
+  {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([6,8,12])},
+  {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([2,4,8])},
+  {progs:PROGS_B,cur:rnd(PROGS_B.length),next:-1,fs:0,ts:ns(),dur:16},
+]
 
-const draw=(p_obj,alpha)=>{
-  const{p,Ut,Ub,Um,Utr,Ube,Ur,Up,Uw,Uf,Ua}=p_obj
+const draw=(po,alpha)=>{
+  const{p,Ut,Ub,Um,Utr,Ube,Ur,Up,Uw,Uf,Ua}=po
   gl.useProgram(p)
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,pal_tex);gl.uniform1i(Up,0)
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,wave_tex);gl.uniform1i(Uw,1)
@@ -666,23 +718,27 @@ window.addEventListener('message',e=>{
     gl.bindTexture(gl.TEXTURE_2D,pal_tex)
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(d.palette))
   }
-  if(d.mode!==undefined&&d.mode!==mode){
-    mode=d.mode
-    next_prog=PROGS[mode%FRAGS.length]
-    fade_start=performance.now()/1000
+  if(d.reset){
+    const t=ns()
+    for(const l of layers){l.next=rnd(l.progs.length,l.cur);l.fs=t}
   }
 })
 
 const render=()=>{
   requestAnimationFrame(render)
   gl.clear(gl.COLOR_BUFFER_BIT)
-  if(next_prog){
-    const t=Math.min(1,(performance.now()/1000-fade_start)/FADE_SECS)
-    draw(prog,1-t)
-    draw(next_prog,t)
-    if(t>=1){prog=next_prog;next_prog=null}
-  } else {
-    draw(prog,1)
+  const t=ns()
+  for(let i=0;i<3;i++){
+    const l=layers[i],ba=ALPHAS[i]
+    if(l.next===-1&&t-l.ts>=l.dur){l.next=rnd(l.progs.length,l.cur);l.fs=t}
+    if(l.next!==-1){
+      const ft=Math.min(1,(t-l.fs)/FADE)
+      draw(l.progs[l.cur],ba*(1-ft))
+      draw(l.progs[l.next],ba*ft)
+      if(ft>=1){l.cur=l.next;l.next=-1;l.ts=t;l.dur=pdur(DURS[i])}
+    }else{
+      draw(l.progs[l.cur],ba)
+    }
   }
 }
 render()
@@ -704,12 +760,6 @@ let viz_start  = null
 let beat          = 0
 let prev_bass     = 0
 let last_beat_t   = 0
-let viz_mode_at   = 0
-let viz_mode_secs = 0
-
-const VIZ_DURATIONS = [2, 4, 8]
-const pick_viz_duration = () => VIZ_DURATIONS[Math.floor(Math.random() * VIZ_DURATIONS.length)]
-
 const ensure_audio_ctx = () => {
   if (audio_ctx) return
   audio_ctx = new AudioContext()
@@ -727,27 +777,63 @@ const freq_avg = (lo, hi) => {
   return s / ((hi - lo) * 255)
 }
 
-const MODE_COUNT = 5
+let _colors_pool = null
 
-let _palette_cache = null
-const get_palette = async () => {
-  if (_palette_cache) return _palette_cache
+const load_colors = async () => {
+  if (_colors_pool) return _colors_pool
   const { colors } = await import('/colors.js')
-  const d = new Uint8Array(colors.length * 4)
-  for (const [i, hex] of colors.entries()) {
-    const c = hex.replace('#', '')
-    d[i*4]   = parseInt(c.slice(0, 2), 16)
-    d[i*4+1] = parseInt(c.slice(2, 4), 16)
-    d[i*4+2] = parseInt(c.slice(4, 6), 16)
-    d[i*4+3] = c.length === 8 ? parseInt(c.slice(6, 8), 16) : 255
+  _colors_pool = colors.flatMap(hex_str => {
+    const c = hex_str.replace('#', '')
+    let r, g, b, a
+    if (c.length === 8) {
+      a = parseInt(c.slice(0, 2), 16)
+      r = parseInt(c.slice(2, 4), 16)
+      g = parseInt(c.slice(4, 6), 16)
+      b = parseInt(c.slice(6, 8), 16)
+    } else if (c.length === 6) {
+      r = parseInt(c.slice(0, 2), 16)
+      g = parseInt(c.slice(2, 4), 16)
+      b = parseInt(c.slice(4, 6), 16)
+      a = 255
+    } else {
+      return []
+    }
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return []
+    if (a < 0xaa) return []
+    if (Math.max(r, g, b) < 55) return []
+    if (Math.max(r, g, b) - Math.min(r, g, b) < 30) return []
+    return [[r, g, b]]
+  })
+  return _colors_pool
+}
+
+const gen_palette = (pool) => {
+  const PAL_W = 64
+  const n = 5 + Math.floor(Math.random() * 6)
+  const anchors = Array.from({ length: n }, () => pool[Math.floor(Math.random() * pool.length)])
+  const d = new Uint8Array(PAL_W * 4)
+  for (let i = 0; i < PAL_W; i++) {
+    const t  = (i / PAL_W) * n
+    const ia = Math.floor(t) % n
+    const ib = (ia + 1) % n
+    const f  = t - Math.floor(t)
+    d[i*4]   = anchors[ia][0] * (1 - f) + anchors[ib][0] * f | 0
+    d[i*4+1] = anchors[ia][1] * (1 - f) + anchors[ib][1] * f | 0
+    d[i*4+2] = anchors[ia][2] * (1 - f) + anchors[ib][2] * f | 0
+    d[i*4+3] = 255
   }
-  _palette_cache = { data: Array.from(d), w: colors.length, h: 1 }
-  return _palette_cache
+  return { data: Array.from(d), w: PAL_W, h: 1 }
+}
+
+const send_palette = async () => {
+  const pool = await load_colors()
+  const p = gen_palette(pool)
+  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: p.data, pal_w: p.w, pal_h: p.h }, '*')
 }
 
 const on_track_change = () => {
-  const t = viz_start ? (performance.now() - viz_start) / 1000 : 0
-  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, mode: Math.floor(Math.random() * MODE_COUNT), time: t }, '*')
+  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, reset: true }, '*')
+  send_palette()
 }
 
 const start_viz = () => {
@@ -756,11 +842,10 @@ const start_viz = () => {
   if (!viz_start) viz_start = performance.now()
   if (!viz_hidden) VIZ_IFRAME.style.opacity = '1'
   document.body.style.background = BODY_BG_VIZ
-  get_palette().then(p => {
-    VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: p.data, pal_w: p.w, pal_h: p.h }, '*')
-  })
+  send_palette()
   if (viz_raf) return
-  viz_mode_at = 0; viz_mode_secs = pick_viz_duration()
+  let last_palette_t = 0
+  const PALETTE_INTERVAL = 25
   const tick = () => {
     viz_raf = requestAnimationFrame(tick)
     analyser.getByteFrequencyData(freq_data)
@@ -773,10 +858,9 @@ const start_viz = () => {
       beat = 1.0
       last_beat_t = t
     }
-    if (viz_mode_secs > 0 && t - viz_mode_at >= viz_mode_secs) {
-      viz_mode_at = t
-      viz_mode_secs = pick_viz_duration()
-      VIZ_IFRAME.contentWindow?.postMessage({ viz: true, mode: Math.floor(Math.random() * MODE_COUNT), time: t }, '*')
+    if (t - last_palette_t >= PALETTE_INTERVAL) {
+      last_palette_t = t
+      send_palette()
     }
     beat     *= 0.88
     prev_bass = prev_bass * 0.8 + raw_bass * 0.2
@@ -796,7 +880,7 @@ const start_viz = () => {
 
 const stop_viz = () => {
   if (viz_raf) { cancelAnimationFrame(viz_raf); viz_raf = null }
-  beat = 0; prev_bass = 0; viz_mode_at = 0; viz_mode_secs = 0
+  beat = 0; prev_bass = 0
   VIZ_IFRAME.style.opacity = '0'
   document.body.style.background = BODY_BG_DEFAULT
 }
@@ -812,6 +896,20 @@ document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   e.preventDefault()
   toggle_viz()
+})
+
+// ── fullscreen ────────────────────────────────────────────────────────────────
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    document.exitFullscreen()
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('np-fullscreen').classList.toggle('active', !!document.fullscreenElement)
 })
 
 // ── section collapse ──────────────────────────────────────────────────────────
@@ -882,8 +980,7 @@ const filterTypeRows = (albumId) => {
 
 const refreshNowPlaying = () => {
   const bar = document.getElementById('now-playing')
-  if (player.idx < 0 || !player.tracks.length) { bar.style.display = 'none'; return }
-  bar.style.display = 'block'
+  if (player.idx < 0 || !player.tracks.length) { return }
   const t = player.tracks[player.idx]
   document.getElementById('np-filename').textContent = t.file_name
   document.getElementById('np-album').textContent = t.title || TRACK_REG[player.albumId]?.title || ''
@@ -962,7 +1059,7 @@ async function load() {
   const classParts = (sum.by_class || []).map(r =>
     `<strong>${r.count.toLocaleString()}</strong>&thinsp;${r.media_class}`
   )
-  document.getElementById('summary').innerHTML =
+  document.getElementById('footer').innerHTML =
     `<strong>${sum.total.toLocaleString()}</strong> files &nbsp;·&nbsp; ` + parts.join(' &nbsp;·&nbsp; ')
     + ` &nbsp;|&nbsp; <strong>${(sum.soundtracks||0).toLocaleString()}</strong> sound tracks`
     + ` &nbsp;·&nbsp; <strong>${(sum.discovered||0).toLocaleString()}</strong> media collections`
@@ -1076,8 +1173,11 @@ function filterAll(q) {
   }
 }
 
-load().catch(e => {
-  document.getElementById('summary').textContent = 'Error: ' + e
+load().then(() => {
+  toggleRandom()
+  playRandom()
+}).catch(e => {
+  document.getElementById('footer').textContent = 'Error: ' + e
 })
 </script>
 </body>
