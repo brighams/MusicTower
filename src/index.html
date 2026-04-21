@@ -8,10 +8,13 @@
 <body>
 <audio id="audio-player"></audio>
 <iframe id="visualizer"></iframe>
+<img id="corner-art" alt="">
 
 <div id="now-playing">
   <div id="np-top">
     <button class="np-btn" id="np-expand" onclick="toggleNpExpand()" title="Expand / Collapse">▸</button>
+    <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
+    <button class="np-btn" id="np-random" onclick="toggleRandom()"    title="Random mode">🎲</button>
     <div id="np-track">
       <span id="np-label">Now Playing</span>
       <span id="np-filename">—</span>
@@ -21,10 +24,9 @@
   </div>
   <div id="np-body" style="display:none">
     <div id="np-bar">
-      <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
+      <span class="np-btn np-spacer" aria-hidden="true">▸</span>
       <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
-      <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
-      <button class="np-btn" id="np-random" onclick="toggleRandom()"    title="Random mode">🎲</button>
+      <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
       <input  id="np-volume" type="range" min="0" max="1" step="0.01" value="1"
               oninput="AUDIO.volume=this.value" title="Volume">
     </div>
@@ -227,6 +229,7 @@ const stopPlayback = () => {
   AUDIO.src = ''
   stop_viz()
   refreshHighlight()
+  _clear_img?.(document.getElementById('corner-art'))
 }
 
 const skipTrack = () => {
@@ -267,7 +270,12 @@ const playRandom = async () => {
   if (!tracks.length) return
   const types = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
   if (!TRACK_REG[albumId]) {
-    TRACK_REG[albumId] = { tracks, urlFn, allTypes: types, title: album.title, scanType, capsule_image: album.capsule_image || null }
+    TRACK_REG[albumId] = { tracks, urlFn, allTypes: types, title: album.title, scanType,
+      capsule_image:         album.capsule_image         || null,
+      logo_url:              album.logo_url              || null,
+      lc_capsule_url:        album.lc_capsule_url        || null,
+      details_capsule_image: album.details_capsule_image || null,
+    }
   }
   const filtered = tracks.filter(t => !isTypeOff(albumId, t.media_type) && (t.rating ?? 0) >= 0)
   const queue = filtered.length ? filtered : tracks.filter(t => (t.rating ?? 0) >= 0)
@@ -680,6 +688,10 @@ const send_palette = async () => {
 const on_track_change = () => {
   VIZ_IFRAME.contentWindow?.postMessage({ viz: true, reset: true }, '*')
   send_palette()
+  const reg = TRACK_REG[player.albumId]
+  const urls   = [reg?.logo_url, reg?.lc_capsule_url, reg?.details_capsule_image, reg?.capsule_image]
+  const scales = [0.3, 1.0, 1.0, 1.0]
+  _coalesce_img?.(document.getElementById('corner-art'), urls, scales)
 }
 
 const start_viz = () => {
@@ -770,9 +782,12 @@ const toggleSection = (h2) => {
 
 let TYPE_ORDER = []  // lowercase, config priority order
 
-const TRACK_REG    = {}  // albumId -> { tracks, urlFn, allTypes, title, scanType, capsule_image }
+const TRACK_REG    = {}  // albumId -> { tracks, urlFn, allTypes, title, scanType, ...image fields }
 const TYPE_OFF     = {}  // albumId -> Set<type>
-const ALBUM_IMAGES = {}  // albumId -> capsule_image url | null
+const ALBUM_IMAGES = {}  // albumId -> { capsule_image, logo_url, lc_capsule_url, details_capsule_image }
+
+let _coalesce_img = null
+let _clear_img    = null
 
 const isTypeOff = (albumId, type) => !!(TYPE_OFF[albumId] && TYPE_OFF[albumId].has(type))
 
@@ -883,11 +898,14 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
 // ── page build ────────────────────────────────────────────────────────────────
 
 async function load() {
-  const [sumRes, stRes, dmRes] = await Promise.all([
+  const [sumRes, stRes, dmRes, coalesce] = await Promise.all([
     fetch('/api/summary'),
     fetch('/api/albums?scan_type=music'),
     fetch('/api/albums?scan_type=files'),
+    import('/ImgCoalesce.js'),
   ])
+  _coalesce_img = coalesce.coalesce_img
+  _clear_img    = coalesce.clear_img
   const sum    = await sumRes.json()
   const stList = await stRes.json()
   const dmList = await dmRes.json()
@@ -932,7 +950,12 @@ function buildAlbumEntry(a, scanType, prefix) {
   const types = (a.types || '').split(',').filter(Boolean).sort()
   const id    = prefix + '_' + encodeURIComponent(a.title).replace(/'/g, '%27')
 
-  ALBUM_IMAGES[id] = a.capsule_image || null
+  ALBUM_IMAGES[id] = {
+    capsule_image:         a.capsule_image         || null,
+    logo_url:              a.logo_url              || null,
+    lc_capsule_url:        a.lc_capsule_url        || null,
+    details_capsule_image: a.details_capsule_image || null,
+  }
   initTypeDefaults(id, types)
 
   const div = document.createElement('div')
@@ -1005,7 +1028,13 @@ async function toggleAlbum(row) {
   const tracks = await fetch(base).then(r => r.json())
   const types  = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
 
-  TRACK_REG[id] = { tracks, urlFn, allTypes: types, title, scanType, capsule_image: ALBUM_IMAGES[id] || null }
+  const imgs = ALBUM_IMAGES[id] || {}
+  TRACK_REG[id] = { tracks, urlFn, allTypes: types, title, scanType,
+    capsule_image:         imgs.capsule_image         || null,
+    logo_url:              imgs.logo_url              || null,
+    lc_capsule_url:        imgs.lc_capsule_url        || null,
+    details_capsule_image: imgs.details_capsule_image || null,
+  }
 
   document.getElementById('fl-' + id)?.classList.add('loaded')
   panel.innerHTML = tracksTable(tracks, urlFn, id, false)

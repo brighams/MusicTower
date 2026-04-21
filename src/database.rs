@@ -11,12 +11,15 @@ pub fn make_placeholder_db() -> Arc<std::sync::Mutex<Connection>> {
     Arc::new(std::sync::Mutex::new(conn))
 }
 
-pub fn open_server_db(db_path: &str, player_db: &str) -> Result<Connection, Box<dyn std::error::Error>> {
+pub fn open_server_db(db_path: &str, player_db: &str, steam_details_db: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let conn = Connection::open(db_path)?;
     conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
     let escaped = player_db.replace('\'', "''");
     conn.execute_batch(&format!("ATTACH DATABASE '{escaped}' AS pdb;"))
         .unwrap_or_else(|e| eprintln!("WARNING: failed to attach player.db: {e}"));
+    let escaped_sdb = steam_details_db.replace('\'', "''");
+    conn.execute_batch(&format!("ATTACH DATABASE '{escaped_sdb}' AS sdb;"))
+        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach steam_details.db: {e}"));
     Ok(conn)
 }
 

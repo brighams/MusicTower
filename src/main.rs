@@ -171,7 +171,7 @@ async fn main() {
     );
 
     if let Some((handle, shared_db)) = server_handle {
-        match database::open_server_db(&cfg.db_file, &player_db) {
+        match database::open_server_db(&cfg.db_file, &player_db, &steam_details_db) {
             Ok(conn) => { *shared_db.lock().unwrap() = conn; }
             Err(e) => eprintln!("DB: failed to open server db: {e}"),
         }

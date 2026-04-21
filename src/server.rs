@@ -3,6 +3,7 @@ const LOADING_HTML: &str = include_str!("loading.html");
 const COLORS_JS: &str = include_str!("colors.js");
 const LOGO_SVG: &str = include_str!("logo.svg");
 const STYLES_CSS: &str = include_str!("styles.css");
+const IMG_COALESCE_JS: &str = include_str!("ImgCoalesce.js");
 
 use axum::{
     body::Body,
@@ -99,11 +100,16 @@ const ALBUMS_LIST: &str = "
            MIN(sf.album_key)                      AS album_key,
            COALESCE(ast.rating, 0)                AS album_rating,
            COALESCE(SUM(ts.play_count), 0)        AS album_play_count,
-           MAX(sa.capsule_image)                  AS capsule_image
+           MAX(sa.capsule_image)                  AS capsule_image,
+           MAX(lc.logo_url)                       AS logo_url,
+           MAX(lc.capsule_url)                    AS lc_capsule_url,
+           MAX(sad.capsule_image)                 AS details_capsule_image
     FROM steam_files sf
-    LEFT JOIN steam_apps sa  ON sa.installdir = sf.title
+    LEFT JOIN steam_apps sa   ON sa.installdir = sf.title
     LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
     LEFT JOIN pdb.track_stats  ts  ON ts.join_key  = sf.join_key
+    LEFT JOIN pdb.logo_cache  lc  ON lc.appid = sa.appid
+    LEFT JOIN sdb.steam_app_details sad ON sad.appid = sa.appid
     WHERE (:scan_type IS NULL OR sf.scan_type = :scan_type)
     GROUP BY sf.title
     ORDER BY sf.title";
@@ -366,19 +372,23 @@ async fn serve_logo_svg() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO_SVG)
 }
 
+async fn serve_img_coalesce_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], IMG_COALESCE_JS)
+}
+
 fn ensure_styles_css() {
     let path = std::path::Path::new("media/styles.css");
     if !path.exists() {
         if let Err(e) = std::fs::write(path, STYLES_CSS) {
             eprintln!("SERVER: failed to write media/styles.css: {e}");
         } else {
-            println!("SERVER: wrote default media/styles.css");
+            println!("SERVER: wrote default stylesheet to media/styles.css — rename to media/userStyle.css to activate");
         }
     }
 }
 
 async fn serve_styles_css() -> impl IntoResponse {
-    let css = std::fs::read_to_string("media/styles.css").unwrap_or_else(|_| STYLES_CSS.to_owned());
+    let css = std::fs::read_to_string("media/userStyle.css").unwrap_or_else(|_| STYLES_CSS.to_owned());
     ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], css)
 }
 
@@ -933,6 +943,7 @@ pub async fn start(
         .route("/colors.js", get(serve_colors_js))
         .route("/logo.svg", get(serve_logo_svg))
         .route("/styles.css", get(serve_styles_css))
+        .route("/ImgCoalesce.js", get(serve_img_coalesce_js))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))

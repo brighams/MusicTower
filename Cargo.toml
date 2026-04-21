@@ -8,7 +8,7 @@ name = "music_server"
 path = "src/main.rs"
 
 [features]
-default = ["details-updater"]
+default = ["details-updater", "logo-cache"]
 details-updater = []
 logo-cache = []
 

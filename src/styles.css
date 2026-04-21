@@ -37,6 +37,7 @@ body {
   box-shadow: 0 0 12px rgba(220,60,255,0.5); }
 #np-stop:hover { border-color: #f86090; color: #ff80a8; box-shadow: 0 0 8px rgba(255,60,100,0.35); }
 #np-fullscreen { font-size: 1.1em; padding: 1px 6px; }
+.np-spacer { visibility: hidden; pointer-events: none; }
 #np-volume { width: 90px; cursor: pointer; flex-shrink: 0; accent-color: #c060f0; vertical-align: middle; opacity: 0.85; }
 #np-volume:hover { opacity: 1; }
 #np-track { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding-left: 8px; border-left: 1px solid #4a1070; }
@@ -198,4 +199,18 @@ body { position: relative; z-index: 1; }
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   z-index: 0; pointer-events: none; border: none;
   opacity: 0; transition: opacity 1.5s ease;
+}
+
+/* ── corner art ──────────────────────────────────────────────────────── */
+#corner-art {
+  position: fixed; bottom: 16px; left: 16px;
+  z-index: 2; pointer-events: none; display: none;
+  border-radius: 4px; opacity: 0.82;
+  transition: opacity 0.4s ease;
+}
+#corner-art[data-src-index="0"] {
+  max-width: min(50vw, 480px);
+}
+#corner-art:not([data-src-index="0"]) {
+  max-width: min(25vw, 220px);
 }
