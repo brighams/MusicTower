@@ -3,7 +3,25 @@ use regex::Regex;
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
+
+pub fn make_placeholder_db() -> Arc<std::sync::Mutex<Connection>> {
+    let conn = Connection::open_in_memory().expect("in-memory placeholder db");
+    Arc::new(std::sync::Mutex::new(conn))
+}
+
+pub fn open_server_db(db_path: &str, player_db: &str, steam_details_db: &str) -> Result<Connection, Box<dyn std::error::Error>> {
+    let conn = Connection::open(db_path)?;
+    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+    let escaped = player_db.replace('\'', "''");
+    conn.execute_batch(&format!("ATTACH DATABASE '{escaped}' AS pdb;"))
+        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach player.db: {e}"));
+    let escaped_sdb = steam_details_db.replace('\'', "''");
+    conn.execute_batch(&format!("ATTACH DATABASE '{escaped_sdb}' AS sdb;"))
+        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach steam_details.db: {e}"));
+    Ok(conn)
+}
 
 pub fn backup_and_init(db_path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let path = Path::new(db_path);
@@ -79,7 +97,11 @@ fn create_schema(conn: &Connection) -> Result<()> {
             file_name TEXT NOT NULL,
             size INTEGER NOT NULL,
             modified INTEGER NOT NULL,
-            created INTEGER NOT NULL
+            created INTEGER NOT NULL,
+            join_key TEXT,
+            album_key TEXT,
+            media_class TEXT,
+            lang TEXT
         );
         CREATE INDEX idx_steam_apps_appid ON steam_apps (appid);
         CREATE INDEX idx_steam_apps_name ON steam_apps (name);
@@ -88,7 +110,10 @@ fn create_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX idx_steam_files_media_type ON steam_files (media_type);
         CREATE INDEX idx_steam_files_title ON steam_files (title);
         CREATE INDEX idx_steam_files_file_name ON steam_files (file_name);
-        CREATE INDEX idx_steam_files_appid ON steam_files (appid);",
+        CREATE INDEX idx_steam_files_appid ON steam_files (appid);
+        CREATE INDEX idx_steam_files_join_key ON steam_files (join_key);
+        CREATE INDEX idx_steam_files_album_key ON steam_files (album_key);
+        CREATE INDEX idx_steam_files_media_class ON steam_files (media_class);",
     )
 }
 
@@ -184,7 +209,7 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )?;
 
         for (i, (path, scan_root)) in files.iter().enumerate() {
@@ -216,6 +241,10 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 .or_else(|| apps_map.get(&title_lower))
                 .cloned();
 
+            let appid_str = appid.as_deref().unwrap_or("0");
+            let join_key = format!("{appid_str}-{title}-{file_name}");
+            let album_key = format!("{appid_str}-{title}");
+
             let norm_root = scan_root.trim_end_matches(['/', '\\']).replace('\\', "/");
             let scan_type = if norm_root.ends_with("steamapps/music") {
                 "music"
@@ -236,6 +265,8 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 .map(millis_since_epoch)
                 .unwrap_or(0);
 
+            let (media_class, lang) = classify_media(&path_str);
+
             stmt.execute(params![
                 media_type.as_str(),
                 appid,
@@ -247,6 +278,10 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 size,
                 modified,
                 created,
+                join_key,
+                album_key,
+                media_class,
+                lang,
             ])?;
 
             if (i + 1) % 10_000 == 0 {
@@ -259,16 +294,82 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     Ok(())
 }
 
+fn classify_media(path_str: &str) -> (String, Option<String>) {
+    let lower = path_str.to_lowercase();
+
+    if lower.contains("audiobook") || lower.contains("audio book") {
+        return ("audiobook".to_owned(), None);
+    }
+
+    let is_effect = lower.contains("effects")
+        || lower.contains("soundeffects")
+        || lower.contains("/sfx/")
+        || lower.contains("/fx/");
+
+    if is_effect {
+        return ("effect".to_owned(), None);
+    }
+
+    const LANG_CODES: &[&str] = &[
+        "en", "de", "fr", "es", "sv", "pt", "nl", "it",
+        "zh", "cs", "hr", "pl", "ro", "ru", "sk", "tr",
+    ];
+
+    for code in LANG_CODES {
+        if lower.contains(&format!("/{code}/")) || lower.contains(&format!("_{code}/")) {
+            return ("voice".to_owned(), Some(code.to_string()));
+        }
+    }
+
+    let is_voice = lower.contains("voice")
+        || lower.contains("localization")
+        || lower.contains("localized")
+        || lower.contains("locale")
+        || lower.contains("language")
+        || lower.contains("speech");
+
+    if is_voice {
+        return ("voice".to_owned(), None);
+    }
+
+    ("music".to_owned(), None)
+}
+
 fn millis_since_epoch(t: SystemTime) -> i64 {
     t.duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
 }
 
-pub fn player_db_path(scanner_db: &str) -> String {
-    let path = Path::new(scanner_db);
-    let dir = path.parent().unwrap_or(Path::new("."));
-    dir.join("player.db").to_string_lossy().into_owned()
+pub fn init_player_db(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let p = Path::new(path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let conn = Connection::open(path)?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         CREATE TABLE IF NOT EXISTS track_stats (
+             join_key  TEXT PRIMARY KEY,
+             rating    INTEGER NOT NULL DEFAULT 0,
+             play_count INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS album_stats (
+             album_key TEXT PRIMARY KEY,
+             rating    INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS logo_cache (
+             appid        TEXT PRIMARY KEY,
+             error        TEXT,
+             capsule_url  TEXT,
+             hero_url     TEXT,
+             logo_url     TEXT,
+             updated_date INTEGER
+         );",
+    )?;
+    println!("DB: player.db initialized at {path}");
+    Ok(())
 }
 
 pub fn open_player_db(path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
@@ -298,7 +399,7 @@ pub fn open_player_db(path: &str) -> Result<Connection, Box<dyn std::error::Erro
              developer        TEXT
          );",
     )?;
-    println!("DB: player.db opened at {path}");
+    println!("DB: steam_details.db opened at {path}");
     Ok(conn)
 }
 
@@ -308,6 +409,19 @@ pub fn sync_owned_to_player_db(conn: &Connection, apps: &[OwnedApp]) -> Result<(
     for app in apps {
         stmt.execute(params![app.appid, app.name])?;
     }
-    println!("DB: Synced {} owned apps to player.db", apps.len());
+    println!("DB: Synced {} owned apps to steam_details.db", apps.len());
+    Ok(())
+}
+
+pub fn insert_logo_cache_placeholders(conn: &mut Connection, appids: &[String]) -> Result<()> {
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO logo_cache (appid) VALUES (?1)")?;
+        for appid in appids {
+            stmt.execute([appid])?;
+        }
+    }
+    tx.commit()?;
+    println!("LOGOS: Inserted {} logo_cache placeholder rows", appids.len());
     Ok(())
 }

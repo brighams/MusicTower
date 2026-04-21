@@ -22,3 +22,5 @@ target
 media/
 .secrets
 *.log
+cache/
+bin/art/*

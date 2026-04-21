@@ -2,12 +2,18 @@
 
 mod config;
 mod database;
+#[cfg(feature = "logo-cache")]
+mod logos;
 mod scanner;
 mod server;
 mod setup;
 mod steam;
 
 use std::env;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
 use tracing::{error, info};
 
@@ -46,7 +52,24 @@ async fn init_and_serve() {
     let mut cfg = config::load_config(DEFAULT_CONFIG);
     info!("STEAM SCANNER: config loaded from {DEFAULT_CONFIG}");
 
-    let player_db = database::player_db_path(&cfg.db_file);
+    let player_db = cfg.player_db_path();
+    let steam_details_db = cfg.steam_details_db_path();
+
+    let scanning = Arc::new(AtomicBool::new(true));
+    let shared_db = database::make_placeholder_db();
+
+    let db_for_server = shared_db.clone();
+    let scan_flag = scanning.clone();
+    let sdb = steam_details_db.clone();
+    let extensions = cfg.extensions();
+
+    tauri::async_runtime::spawn(server::start(
+        BIND_ADDR,
+        db_for_server,
+        scan_flag,
+        extensions.clone(),
+        sdb,
+    ));
 
     let mut conn = match database::backup_and_init(&cfg.db_file) {
         Ok(c) => c,
@@ -56,16 +79,8 @@ async fn init_and_serve() {
         }
     };
 
-    let db_file = cfg.db_file.clone();
-    let extensions = cfg.extensions();
-
-    // Start the server immediately so the UI is available while the scan runs.
-    tauri::async_runtime::spawn(server::start(
-        BIND_ADDR,
-        db_file,
-        player_db.clone(),
-        extensions.clone(),
-    ));
+    #[cfg(feature = "logo-cache")]
+    let mut logo_appids: Vec<String> = Vec::new();
 
     match steam::find_steam_dir(cfg.steam_dir.as_deref()) {
         Some(steam_dir) => {
@@ -92,14 +107,16 @@ async fn init_and_serve() {
             if let Err(e) = database::insert_owned_apps(&mut conn, &owned) {
                 error!("DB: failed to insert owned apps: {e}");
             }
-            match database::open_player_db(&player_db) {
+            match database::open_player_db(&steam_details_db) {
                 Ok(pconn) => {
                     if let Err(e) = database::sync_owned_to_player_db(&pconn, &owned) {
-                        error!("DB: failed to sync to player.db: {e}");
+                        error!("DB: failed to sync to steam_details.db: {e}");
                     }
                 }
-                Err(e) => error!("DB: failed to open player.db: {e}"),
+                Err(e) => error!("DB: failed to open steam_details.db: {e}"),
             }
+            #[cfg(feature = "logo-cache")]
+            { logo_appids = owned.iter().map(|a| a.appid.clone()).collect(); }
         }
         Err(e) => error!("STEAM: skipping owned games ({e})"),
     }
@@ -119,8 +136,31 @@ async fn init_and_serve() {
 
     drop(conn);
 
+    if let Err(e) = database::init_player_db(&player_db) {
+        error!("DB: failed to init player.db: {e}");
+    }
+
+    #[cfg(feature = "logo-cache")]
+    {
+        match rusqlite::Connection::open(&player_db) {
+            Ok(mut pconn) => {
+                if let Err(e) = database::insert_logo_cache_placeholders(&mut pconn, &logo_appids) {
+                    error!("LOGOS: failed to insert placeholders: {e}");
+                }
+            }
+            Err(e) => error!("LOGOS: failed to open player.db: {e}"),
+        }
+        logos::spawn_logo_loader(player_db.clone(), cfg.logo_cache_path());
+    }
+
     info!(
         "STEAM SCANNER: scan done in {:.3}s",
         start.elapsed().as_secs_f64()
     );
+
+    match database::open_server_db(&cfg.db_file, &player_db, &steam_details_db) {
+        Ok(conn) => { *shared_db.lock().unwrap() = conn; }
+        Err(e) => error!("DB: failed to open server db: {e}"),
+    }
+    scanning.store(false, Ordering::Relaxed);
 }

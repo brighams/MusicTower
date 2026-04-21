@@ -1,9 +1,16 @@
+const INDEX_HTML: &str = include_str!("../../src/index.html");
+const LOADING_HTML: &str = include_str!("../../src/loading.html");
+const COLORS_JS: &str = include_str!("../../src/colors.js");
+const LOGO_SVG: &str = include_str!("../../src/logo.svg");
+const STYLES_CSS: &str = include_str!("../../src/styles.css");
+const IMG_COALESCE_JS: &str = include_str!("../../src/ImgCoalesce.js");
+
 use axum::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use mime_guess::MimeGuess;
@@ -11,8 +18,12 @@ use rusqlite::{params, Connection};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
@@ -23,6 +34,7 @@ use tower_http::cors::{Any, CorsLayer};
 #[derive(Clone)]
 struct AppState {
     db: Arc<Mutex<Connection>>,
+    scanning: Arc<AtomicBool>,
     now_playing: Arc<Mutex<Option<Value>>>,
     media_type_order: Vec<String>,
 }
@@ -81,24 +93,46 @@ const GAMES_ALL: &str = "
     ORDER BY name";
 
 const ALBUMS_LIST: &str = "
-    SELECT title,
-           COUNT(*)                          AS track_count,
-           GROUP_CONCAT(DISTINCT media_type) AS types
-    FROM steam_files
-    WHERE (:scan_type IS NULL OR scan_type = :scan_type)
-    GROUP BY title
-    ORDER BY title";
+    SELECT sf.title,
+           COUNT(*)                               AS track_count,
+           GROUP_CONCAT(DISTINCT sf.media_type)   AS types,
+           MIN(sf.album_key)                      AS album_key,
+           COALESCE(ast.rating, 0)                AS album_rating,
+           COALESCE(SUM(ts.play_count), 0)        AS album_play_count,
+           MAX(sa.capsule_image)                  AS capsule_image,
+           MAX(lc.logo_url)                       AS logo_url,
+           MAX(lc.capsule_url)                    AS lc_capsule_url,
+           MAX(sad.capsule_image)                 AS details_capsule_image
+    FROM steam_files sf
+    LEFT JOIN steam_apps sa   ON sa.installdir = sf.title
+    LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
+    LEFT JOIN pdb.track_stats  ts  ON ts.join_key  = sf.join_key
+    LEFT JOIN pdb.logo_cache  lc  ON lc.appid = sa.appid
+    LEFT JOIN sdb.steam_app_details sad ON sad.appid = sa.appid
+    WHERE (:scan_type IS NULL OR sf.scan_type = :scan_type)
+    GROUP BY sf.title
+    ORDER BY sf.title";
 
 const ALBUM_FILE_TRACKS: &str = "
-    SELECT id AS file_id, media_type, title, dir_path, full_path, file_name, size, modified, created
-    FROM steam_files
-    WHERE title = :title
-      AND (:type IS NULL OR UPPER(media_type) = UPPER(:type))
-      AND (:scan_type IS NULL OR scan_type = :scan_type)
-    ORDER BY file_name";
+    SELECT sf.id AS file_id, sf.media_type, sf.title, sf.dir_path, sf.full_path,
+           sf.file_name, sf.size, sf.modified, sf.created,
+           sf.join_key, sf.album_key,
+           COALESCE(ts.rating,     0) AS rating,
+           COALESCE(ts.play_count, 0) AS play_count,
+           sf.media_class, sf.lang
+    FROM steam_files sf
+    LEFT JOIN pdb.track_stats ts ON ts.join_key = sf.join_key
+    WHERE sf.title = :title
+      AND (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
+      AND (:scan_type IS NULL OR sf.scan_type = :scan_type)
+    ORDER BY sf.file_name";
 
-const RANDOM_ALBUMS: &str =
-    "SELECT DISTINCT title FROM steam_files WHERE (:type IS NULL OR UPPER(media_type) = UPPER(:type))";
+const RANDOM_ALBUMS: &str = "
+    SELECT DISTINCT sf.title
+    FROM steam_files sf
+    LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
+    WHERE (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
+      AND COALESCE(ast.rating, 0) >= 0";
 
 const ALBUM_TRACKS: &str = "
     SELECT steam_apps.*, steam_files.*,
@@ -106,6 +140,8 @@ const ALBUM_TRACKS: &str = "
     FROM steam_apps
     JOIN steam_files ON steam_apps.installdir = steam_files.title
         AND steam_files.title = :album_title
+    LEFT JOIN pdb.track_stats ts ON ts.join_key = steam_files.join_key
+    WHERE COALESCE(ts.rating, 0) >= 0
     ORDER BY steam_files.file_name";
 
 const TRACK_BY_ID: &str = "
@@ -310,7 +346,49 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
     let discovered: i64 = db
         .query_row("SELECT COUNT(DISTINCT title) FROM steam_files WHERE scan_type = 'files'", (), |r| r.get(0))
         .unwrap_or(0);
-    Json(json!({ "total": total, "by_type": by_type, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
+    let by_class = run_query(
+        &db,
+        "SELECT media_class, COUNT(*) as count FROM steam_files GROUP BY media_class ORDER BY count DESC",
+        (),
+    );
+    Json(json!({ "total": total, "by_type": by_type, "by_class": by_class, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
+}
+
+async fn serve_index(State(s): State<AppState>) -> impl IntoResponse {
+    let html = if s.scanning.load(Ordering::Relaxed) { LOADING_HTML } else { INDEX_HTML };
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html)
+}
+
+async fn api_status(State(s): State<AppState>) -> Json<Value> {
+    Json(json!({ "scanning": s.scanning.load(Ordering::Relaxed) }))
+}
+
+async fn serve_colors_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], COLORS_JS)
+}
+
+async fn serve_logo_svg() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO_SVG)
+}
+
+async fn serve_img_coalesce_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], IMG_COALESCE_JS)
+}
+
+fn ensure_styles_css() {
+    let path = std::path::Path::new("media/styles.css");
+    if !path.exists() {
+        if let Err(e) = std::fs::write(path, STYLES_CSS) {
+            eprintln!("SERVER: failed to write media/styles.css: {e}");
+        } else {
+            println!("SERVER: wrote default stylesheet to media/styles.css — rename to media/userStyle.css to activate");
+        }
+    }
+}
+
+async fn serve_styles_css() -> impl IntoResponse {
+    let css = std::fs::read_to_string("media/userStyle.css").unwrap_or_else(|_| STYLES_CSS.to_owned());
+    ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], css)
 }
 
 #[derive(Deserialize)]
@@ -365,11 +443,19 @@ async fn serve_media(State(s): State<AppState>, Path(file_id): Path<i64>) -> Res
         let db = s.db.lock().unwrap();
         match run_query_one(
             &db,
-            "SELECT id AS file_id, full_path, file_name, media_type, title FROM steam_files WHERE id = :id",
+            "SELECT id AS file_id, full_path, file_name, media_type, title, join_key FROM steam_files WHERE id = :id",
             rusqlite::named_params! { ":id": file_id },
         ) {
             Some(t) => {
                 let fp = t["full_path"].as_str().unwrap_or("").to_owned();
+                let jk = t.get("join_key").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+                if !jk.is_empty() {
+                    db.execute(
+                        "INSERT INTO pdb.track_stats (join_key, play_count) VALUES (?1, 1)
+                         ON CONFLICT(join_key) DO UPDATE SET play_count = play_count + 1",
+                        params![jk],
+                    ).ok();
+                }
                 *s.now_playing.lock().unwrap() = Some(t);
                 fp
             }
@@ -479,6 +565,85 @@ async fn api_random_track(State(s): State<AppState>, Query(q): Query<RandomQuery
     }
 }
 
+// ── ratings ───────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RatingBody {
+    key: String,
+    rating: i64,
+    kind: String,
+}
+
+async fn api_set_rating(State(s): State<AppState>, Json(body): Json<RatingBody>) -> StatusCode {
+    let db = s.db.lock().unwrap();
+    let result = if body.kind == "album" {
+        db.execute(
+            "INSERT INTO pdb.album_stats (album_key, rating) VALUES (?1, ?2)
+             ON CONFLICT(album_key) DO UPDATE SET rating = ?2",
+            params![body.key, body.rating],
+        )
+    } else {
+        db.execute(
+            "INSERT INTO pdb.track_stats (join_key, rating) VALUES (?1, ?2)
+             ON CONFLICT(join_key) DO UPDATE SET rating = ?2",
+            params![body.key, body.rating],
+        )
+    };
+    if result.is_ok() { StatusCode::OK } else { StatusCode::INTERNAL_SERVER_ERROR }
+}
+
+// ── image cache ───────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct ImageCacheQuery {
+    url: String,
+}
+
+async fn api_image_cache(Query(q): Query<ImageCacheQuery>) -> Response {
+    let url = q.url.clone();
+    let result = tokio::task::spawn_blocking(move || -> Result<(Vec<u8>, String), StatusCode> {
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+        use std::io::Read;
+
+        let cache_dir = PathBuf::from("cache/images");
+        std::fs::create_dir_all(&cache_dir)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let mut hasher = DefaultHasher::new();
+        url.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let ext = url.split('?').next().unwrap_or(&url)
+            .rsplit('.').next()
+            .filter(|e| ["jpg","jpeg","png","webp","gif"].contains(e))
+            .unwrap_or("jpg");
+
+        let cache_path = cache_dir.join(format!("{hash:016x}.{ext}"));
+
+        if !cache_path.exists() {
+            let resp = ureq::get(&url).call().map_err(|_| StatusCode::BAD_GATEWAY)?;
+            let mut buf = Vec::new();
+            resp.into_reader().read_to_end(&mut buf).map_err(|_| StatusCode::BAD_GATEWAY)?;
+            std::fs::write(&cache_path, &buf).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+
+        let data = std::fs::read(&cache_path).map_err(|_| StatusCode::NOT_FOUND)?;
+        let mime = MimeGuess::from_path(&cache_path).first_raw().unwrap_or("image/jpeg").to_owned();
+        Ok((data, mime))
+    }).await;
+
+    match result {
+        Ok(Ok((data, mime))) => Response::builder()
+            .header(header::CONTENT_TYPE, mime)
+            .header(header::CACHE_CONTROL, "public, max-age=604800")
+            .body(Body::from(data))
+            .unwrap(),
+        Ok(Err(status)) => status.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 // ── CDN ───────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -529,6 +694,14 @@ async fn cdn_serve(State(s): State<AppState>, Path(p): Path<CdnParams>) -> Respo
         match lookup_track(&db, &p) {
             Some((t, m)) => {
                 let fp = t["full_path"].as_str().unwrap_or("").to_owned();
+                let jk = t.get("join_key").and_then(|v| v.as_str()).unwrap_or("").to_owned();
+                if !jk.is_empty() {
+                    db.execute(
+                        "INSERT INTO pdb.track_stats (join_key, play_count) VALUES (?1, 1)
+                         ON CONFLICT(join_key) DO UPDATE SET play_count = play_count + 1",
+                        params![jk],
+                    ).ok();
+                }
                 (t, m, fp)
             }
             None => {
@@ -552,6 +725,7 @@ async fn cdn_serve(State(s): State<AppState>, Path(p): Path<CdnParams>) -> Respo
 
 // ── background app-details updater ───────────────────────────────────────────
 
+#[cfg(feature = "details-updater")]
 fn mark_app_detail_error(conn: &Connection, appid: &str) -> Result<(), rusqlite::Error> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -565,19 +739,19 @@ fn mark_app_detail_error(conn: &Connection, appid: &str) -> Result<(), rusqlite:
     Ok(())
 }
 
-fn spawn_details_updater(player_db_path: String) {
+#[cfg(feature = "details-updater")]
+fn spawn_details_updater(steam_details_db: String) {
     std::thread::spawn(move || {
-        let conn = match rusqlite::Connection::open(&player_db_path) {
+        let conn = match rusqlite::Connection::open(&steam_details_db) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("DETAILS: failed to open player.db: {e}");
+                eprintln!("DETAILS: failed to open steam_details.db: {e}");
                 return;
             }
         };
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;").ok();
 
         loop {
-
             let row: Option<(String, String)> = conn
                 .query_row(
                     "SELECT appid, title FROM steam_app_details WHERE date_updated IS NULL order by title LIMIT 1",
@@ -597,7 +771,7 @@ fn spawn_details_updater(player_db_path: String) {
             std::thread::sleep(std::time::Duration::from_millis(1500));
             println!("DETAILS: fetching {title} ({appid})");
             let url = format!("http://store.steampowered.com/api/appdetails?appids={appid}");
-            
+
             let response: serde_json::Value = match ureq::get(&url).call() {
                 Err(ureq::Error::Status(code, resp)) => {
                     let body = resp.into_string().unwrap_or_default();
@@ -631,7 +805,6 @@ fn spawn_details_updater(player_db_path: String) {
             }
 
             let data = &response[&appid]["data"];
-
             let app_type = data["type"].as_str().map(str::to_owned);
 
             if !matches!(app_type.as_deref(), Some("game") | Some("music")) {
@@ -696,17 +869,18 @@ fn spawn_details_updater(player_db_path: String) {
 
 // ── startup ───────────────────────────────────────────────────────────────────
 
-pub async fn start(bind_addr: &str, db_path: String, player_db_path: String, media_type_order: Vec<String>) {
-    use tracing::{error, info};
-
-    let conn = match Connection::open(db_path) {
-        Ok(c) => c,
-        Err(e) => { error!("ERROR: opening db for server: {e}"); return; }
-    };
-    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;").ok();
+pub async fn start(
+    bind_addr: &str,
+    db: Arc<Mutex<Connection>>,
+    scanning: Arc<AtomicBool>,
+    media_type_order: Vec<String>,
+    steam_details_db: String,
+) {
+    ensure_styles_css();
 
     let state = AppState {
-        db: Arc::new(Mutex::new(conn)),
+        db,
+        scanning,
         now_playing: Arc::new(Mutex::new(None)),
         media_type_order,
     };
@@ -717,6 +891,12 @@ pub async fn start(bind_addr: &str, db_path: String, player_db_path: String, med
         .allow_headers(Any);
 
     let app = Router::new()
+        .route("/", get(serve_index))
+        .route("/api/status", get(api_status))
+        .route("/colors.js", get(serve_colors_js))
+        .route("/logo.svg", get(serve_logo_svg))
+        .route("/styles.css", get(serve_styles_css))
+        .route("/ImgCoalesce.js", get(serve_img_coalesce_js))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))
@@ -729,6 +909,8 @@ pub async fn start(bind_addr: &str, db_path: String, player_db_path: String, med
         .route("/api/nowplaying", get(api_now_playing))
         .route("/api/random/track", get(api_random_track))
         .route("/api/random/game/music", get(api_random_track))
+        .route("/api/rating", post(api_set_rating))
+        .route("/api/image-cache", get(api_image_cache))
         .route(
             "/api/validate/cdn.media/id/{file_id}/appid/{appid}/{file_name}",
             get(cdn_validate),
@@ -740,16 +922,22 @@ pub async fn start(bind_addr: &str, db_path: String, player_db_path: String, med
         .with_state(state)
         .layer(cors);
 
-    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
-        Ok(l) => l,
-        Err(e) => { error!("ERROR: binding to {bind_addr}: {e}"); return; }
-    };
+    let addr: SocketAddr = bind_addr.parse().unwrap_or_else(|e| {
+        eprintln!("ERROR: invalid bind address '{bind_addr}': {e}");
+        std::process::exit(1);
+    });
 
-    spawn_details_updater(player_db_path);
+    #[cfg(feature = "details-updater")]
+    spawn_details_updater(steam_details_db);
 
-    info!("SERVER: http://{bind_addr}");
+    println!("SERVER: http://{addr}");
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap_or_else(|e| {
+        eprintln!("ERROR: binding to {addr}: {e}");
+        std::process::exit(1);
+    });
 
     if let Err(e) = axum::serve(listener, app).await {
-        error!("SERVER error: {e}");
+        eprintln!("SERVER error: {e}");
     }
 }

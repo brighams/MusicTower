@@ -2,172 +2,39 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Starkeeper Music</title>
-<link rel="icon" type="image/png" href="starkeeper-128-logo.png">
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font: 14px/1.5 monospace; padding: 24px; color: #d8c8f0;
-  background: linear-gradient(160deg, #0e0820 0%, #160d30 50%, #0c0618 100%);
-  min-height: 100vh;
-}
-h1 { color: #e8c040; margin-bottom: 12px; font-size: 1.4em; letter-spacing: 2px;
-     text-shadow: 0 0 16px rgba(232,192,64,0.35); }
-#summary {
-  margin-bottom: 20px; color: #b090d8; padding-left: 12px;
-  border-left: 3px solid #6030a0;
-}
-#summary strong { color: #d0a8ff; }
-
-/* ── now playing (deep vivid) ──────────────────────────────────────── */
-#now-playing {
-  display: none; margin-bottom: 20px; padding: 10px 16px;
-  background: linear-gradient(160deg, #1a0035 0%, #2e0055 55%, #180030 100%);
-  border-left: 4px solid #c060f0;
-  box-shadow: 0 0 24px rgba(160,0,255,0.25), 0 2px 8px rgba(0,0,0,0.6);
-  position: sticky; top: 0; z-index: 100;
-}
-#np-inner { position: relative; }
-#np-popout {
-  position: absolute; top: 0; right: 0;
-  background: none; border: 1px solid #3a1060; color: #5a2888;
-  cursor: pointer; font-size: 0.78em; padding: 1px 6px; border-radius: 2px;
-  font-family: inherit; line-height: 1.6; transition: border-color 0.12s, color 0.12s;
-}
-#np-popout:hover { border-color: #c060f0; color: #c060f0; box-shadow: 0 0 6px rgba(180,60,240,0.35); }
-#np-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.np-btn {
-  background: rgba(180,0,255,0.08); border: 1px solid #6a28a0; color: #b080d8;
-  cursor: pointer; font-size: 0.85em; padding: 2px 8px; border-radius: 3px;
-  font-family: inherit; line-height: 1.7; flex-shrink: 0; user-select: none;
-  transition: border-color 0.12s, color 0.12s, box-shadow 0.12s;
-}
-.np-btn:hover { border-color: #df60ff; color: #f0c0ff; box-shadow: 0 0 8px rgba(200,60,255,0.4); }
-.np-btn.active { background: rgba(200,50,255,0.18); border-color: #e060f8; color: #f080ff;
-  box-shadow: 0 0 12px rgba(220,60,255,0.5); }
-#np-stop:hover { border-color: #f86090; color: #ff80a8; box-shadow: 0 0 8px rgba(255,60,100,0.35); }
-#np-volume { width: 90px; cursor: pointer; flex-shrink: 0; accent-color: #c060f0; vertical-align: middle; opacity: 0.85; }
-#np-volume:hover { opacity: 1; }
-#np-track { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding-left: 8px; border-left: 1px solid #4a1070; }
-#np-label { color: #c060f0; font-size: 0.72em; letter-spacing: 2px; text-transform: uppercase;
-  flex-shrink: 0; text-shadow: 0 0 8px rgba(180,60,255,0.7); }
-#np-filename { color: #f0d8ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.95em; }
-#np-tracks { max-height: 200px; overflow-y: auto; scrollbar-color: #7020a0 #0e0020; scrollbar-width: thin; }
-#np-tracks::-webkit-scrollbar { width: 6px; }
-#np-tracks::-webkit-scrollbar-track { background: #0e0020; }
-#np-tracks::-webkit-scrollbar-thumb { background: #7020a0; border-radius: 3px; }
-#np-tracks::-webkit-scrollbar-thumb:hover { background: #b040e0; }
-#np-tracks table { background: transparent; }
-#np-tracks th { color: #6a2090; border-bottom-color: #2a0050; }
-#np-tracks td { color: #c8a8e8; }
-#np-tracks tr:hover td { background: rgba(140,0,200,0.15); }
-#np-tracks tr.playing td { background: rgba(160,0,220,0.25); }
-#np-tracks tr.playing .play-btn { color: #e060f8; }
-
-/* ── filter ──────────────────────────────────────────────────────── */
-.filter-row { margin-bottom: 20px; }
-.filter-row input {
-  background: #1a0d30; border: 1px solid #4a2878; color: #d0b8f0;
-  padding: 4px 10px; width: 300px; font: inherit; border-radius: 3px;
-}
-.filter-row input:focus { outline: none; border-color: #c060f0; box-shadow: 0 0 6px rgba(180,60,240,0.3); }
-.filter-row input::placeholder { color: #5a3878; }
-
-/* ── section headers ─────────────────────────────────────────────── */
-h2 { font-size: 1em; color: #7848b8; letter-spacing: 1px; text-transform: uppercase;
-     border-bottom: 1px solid #2a1450; padding-bottom: 6px; margin-bottom: 4px;
-     cursor: pointer; user-select: none; }
-h2:hover { color: #b070e0; }
-h2 small { color: #4a2870; text-transform: none; letter-spacing: 0; margin-left: 8px; font-weight: normal; }
-.section-arrow { margin-right: 6px; }
-.section { margin-bottom: 32px; }
-.section-body.collapsed { display: none; }
-
-/* ── album rows ──────────────────────────────────────────────────── */
-.row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 4px; cursor: pointer; gap: 16px; border-bottom: 1px solid #1e0e38;
-}
-.row:hover { background: rgba(120,40,200,0.12); }
-.row-name { color: #c090f0; flex: 1; }
-.row-meta { color: #5a3878; font-size: 0.85em; flex-shrink: 0; }
-.floppy-btn {
-  display: none; background: none; border: none; color: #4a2870;
-  cursor: pointer; font-size: 1.1em; padding: 0 2px; flex-shrink: 0; line-height: 1;
-  transition: color 0.12s;
-}
-.floppy-btn.loaded { display: block; }
-.row:hover .floppy-btn.loaded { color: #c060f0; text-shadow: 0 0 8px rgba(180,60,240,0.6); }
-.badges { display: flex; gap: 4px; flex-shrink: 0; }
-.badge {
-  font-size: 0.72em; padding: 1px 5px; border-radius: 2px;
-  background: #1e0d38; color: #6040a0; letter-spacing: 0.5px;
-}
-.type-toggle {
-  font-size: 0.72em; padding: 1px 5px; border-radius: 2px; letter-spacing: 0.5px;
-  cursor: pointer; border: 1px solid #6030a0; background: #1e0d38; color: #c080f0;
-  user-select: none; font-family: inherit; transition: border-color 0.1s, color 0.1s;
-}
-.type-toggle:hover { border-color: #c060f0; color: #e0a8ff; }
-.type-toggle.off {
-  background: #120830; color: #3a2055; border-color: #1e0d38; text-decoration: line-through;
-}
-
-/* ── track panels ────────────────────────────────────────────────── */
-.tracks-panel { display: none; padding: 4px 8px 12px 20px; }
-.tracks-panel.open { display: block; }
-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
-th { color: #5a3080; text-align: left; padding: 3px 8px; border-bottom: 1px solid #2a1050; }
-td { padding: 2px 8px; color: #c0a8e0; }
-tr:hover td { background: rgba(100,30,160,0.18); }
-td a { color: #c090f0; text-decoration: none; }
-td a:hover { color: #e8c040; }
-.dim { color: #5a3878; }
-.msg { color: #4a2870; font-style: italic; padding: 6px 0; display: block; }
-
-.play-col { width: 20px; padding: 2px 2px 2px 4px !important; }
-.play-btn {
-  visibility: hidden; background: none; border: none;
-  color: #9060c0; cursor: pointer; font-size: 0.85em; padding: 0; line-height: 1;
-}
-tr:hover .play-btn { visibility: visible; }
-tr.playing .play-btn { visibility: visible; color: #e060f8; }
-tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
-
-/* ── scrollbars (track panels) ───────────────────────────────────── */
-.tracks-panel { scrollbar-color: #4a1880 #0e0820; scrollbar-width: thin; }
-.tracks-panel::-webkit-scrollbar { width: 6px; }
-.tracks-panel::-webkit-scrollbar-track { background: #0e0820; }
-.tracks-panel::-webkit-scrollbar-thumb { background: #4a1880; border-radius: 3px; }
-.tracks-panel::-webkit-scrollbar-thumb:hover { background: #8030c0; }
-</style>
+<title>MusicTower</title>
+<link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<h1>⭐ STARKEEPER MEDIA</h1>
-<div id="summary" class="msg">loading…</div>
-
 <audio id="audio-player"></audio>
+<iframe id="visualizer"></iframe>
+<img id="corner-art" alt="">
 
 <div id="now-playing">
-  <div id="np-inner">
-<div id="np-bar">
-    <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
-    <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
+  <div id="np-top">
+    <button class="np-btn" id="np-expand" onclick="toggleNpExpand()" title="Expand / Collapse">▸</button>
     <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
     <button class="np-btn" id="np-random" onclick="toggleRandom()"    title="Random mode">🎲</button>
-    <input  id="np-volume" type="range" min="0" max="1" step="0.01" value="1"
-            oninput="AUDIO.volume=this.value" title="Volume">
     <div id="np-track">
       <span id="np-label">Now Playing</span>
       <span id="np-filename">—</span>
     </div>
+    <span id="np-album"></span>
+    <button class="np-btn" id="np-fullscreen" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
   </div>
-  <div id="np-tracks"></div>
+  <div id="np-body" style="display:none">
+    <div id="np-bar">
+      <span class="np-btn np-spacer" aria-hidden="true">▸</span>
+      <button class="np-btn" id="np-stop"   onclick="stopPlayback()"    title="Stop">■</button>
+      <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
+      <input  id="np-volume" type="range" min="0" max="1" step="0.01" value="1"
+              oninput="AUDIO.volume=this.value" title="Volume">
+    </div>
+    <div id="np-tracks"></div>
+    <div class="filter-row">
+      <input id="search" type="text" placeholder="filter by name…" oninput="filterAll(this.value)">
+    </div>
   </div>
-</div>
-
-<div class="filter-row">
-  <input id="search" type="text" placeholder="filter by name…" oninput="filterAll(this.value)">
 </div>
 
 <div class="section">
@@ -180,11 +47,142 @@ tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
   <div id="media" class="section-body"><span class="msg">loading…</span></div>
 </div>
 
-<script>
-const API = 'http://localhost:8086'
+<div id="footer" class="msg">loading…</div>
 
+<script>
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+// ── rating helpers ────────────────────────────────────────────────────────────
+
+const SHOW_PATHS = new URLSearchParams(window.location.search).has('show_paths')
+
+const RATING_HOLD_MS = 380
+
+const POPUP_OPTS = [
+  { cls: 'rp-skull', icon: '☠',     value: -1   },
+  { cls: 'rp-clear', icon: '☆',     value: 0    },
+  { cls: 'rp-star',  icon: '★',     value: 200  },
+  { cls: 'rp-star',  icon: '★★',    value: 400  },
+  { cls: 'rp-star',  icon: '★★★',   value: 600  },
+  { cls: 'rp-star',  icon: '★★★★',  value: 800  },
+  { cls: 'rp-star',  icon: '★★★★★', value: 1000 },
+]
+
+const rating_icon = (n) => {
+  if (n < 0)   return `<span class="rating-skull">☠</span>`
+  if (n === 0) return `<span class="rating-empty">☆</span>`
+  const stars = n <= 333 ? '★' : n <= 666 ? '★★' : '★★★'
+  return `<span class="rating-stars">${stars}</span>`
+}
+
+const rating_widget_html = (key, kind, rating) =>
+  `<span class="rating-widget" data-key="${esc(key)}" data-kind="${esc(kind)}" data-rating="${rating}"
+    onmousedown="ratingMouseDown(event,this)" onmouseup="ratingMouseUp(event,this)"
+    ondblclick="ratingDblClick(event,this)">${rating_icon(rating)}</span>`
+
+const applyRating = async (el, val) => {
+  el.dataset.rating = val
+  el.innerHTML = rating_icon(val)
+  await fetch('/api/rating', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: el.dataset.key, rating: val, kind: el.dataset.kind})
+  }).catch(() => {})
+  if (el.dataset.kind === 'track') {
+    el.closest('tr')?.classList.toggle('banned-track', val < 0)
+  } else {
+    el.closest('.album-entry')?.classList.toggle('banned-album', val < 0)
+  }
+}
+
+let _ratingPopup = null
+
+const closeRatingPopup = () => {
+  if (_ratingPopup) { _ratingPopup.remove(); _ratingPopup = null }
+  document.removeEventListener('pointerdown', _popupOutside)
+  document.removeEventListener('keydown', _popupKey)
+}
+
+const _popupOutside = (e) => {
+  if (_ratingPopup && !_ratingPopup.contains(e.target)) closeRatingPopup()
+}
+
+const _popupKey = (e) => {
+  if (e.key === 'Escape') closeRatingPopup()
+}
+
+const showRatingPopup = (widget) => {
+  closeRatingPopup()
+  const cur = parseInt(widget.dataset.rating) || 0
+  const popup = document.createElement('div')
+  popup.className = 'rating-popup'
+
+  for (const o of POPUP_OPTS) {
+    const opt = document.createElement('div')
+    const active = o.value === cur ? ' rp-active' : ''
+    opt.className = `rp-opt ${o.cls}${active}`
+    opt.textContent = o.icon
+    opt.dataset.value = o.value
+    popup.appendChild(opt)
+  }
+
+  popup.addEventListener('click', (e) => {
+    const opt = e.target.closest('.rp-opt')
+    if (!opt) return
+    e.stopPropagation()
+    applyRating(widget, parseInt(opt.dataset.value))
+    closeRatingPopup()
+  })
+
+  const rect = widget.getBoundingClientRect()
+  const popupW = POPUP_OPTS.length * 46
+  const left = Math.min(rect.left, window.innerWidth - popupW - 8)
+  popup.style.left = Math.max(4, left) + 'px'
+  popup.style.top  = (rect.bottom + 6) + 'px'
+  document.body.appendChild(popup)
+  _ratingPopup = popup
+
+  setTimeout(() => {
+    document.addEventListener('pointerdown', _popupOutside)
+    document.addEventListener('keydown', _popupKey)
+  }, 0)
+}
+
+const ratingMouseDown = (evt, el) => {
+  if (evt.button !== 0) return
+  evt.preventDefault(); evt.stopPropagation()
+  el._holdTimer = setTimeout(() => { el._holdTimer = null; showRatingPopup(el) }, RATING_HOLD_MS)
+}
+
+const ratingMouseUp = (evt, el) => {
+  if (el._holdTimer) { clearTimeout(el._holdTimer); el._holdTimer = null }
+}
+
+const ratingDblClick = (evt, el) => {
+  evt.stopPropagation()
+  if (el._holdTimer) { clearTimeout(el._holdTimer); el._holdTimer = null }
+  closeRatingPopup()
+  const cur = parseInt(el.dataset.rating) || 0
+  const inp = document.createElement('input')
+  inp.type = 'number'; inp.min = '-1'; inp.max = '1000'
+  inp.value = cur; inp.className = 'rating-input'
+  el.innerHTML = ''; el.appendChild(inp)
+  inp.focus(); inp.select()
+
+  let done = false
+  const commit = async () => {
+    if (done) return; done = true
+    const raw = inp.value.trim()
+    const val = raw === '' ? 0 : Math.max(-1, Math.min(1000, parseInt(raw) || 0))
+    await applyRating(el, val)
+  }
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') inp.blur()
+    if (e.key === 'Escape') { done = true; e.stopPropagation(); el.innerHTML = rating_icon(cur) }
+  })
+  inp.addEventListener('blur', commit)
 }
 
 // ── player ────────────────────────────────────────────────────────────────────
@@ -195,8 +193,8 @@ let randomMode = false
 let ALL_ST_ALBUMS = []
 let ALL_DM_ALBUMS = []
 
-AUDIO.onplay  = () => { document.getElementById('np-play').textContent = '⏸' }
-AUDIO.onpause = () => { document.getElementById('np-play').textContent = '▶' }
+AUDIO.onplay  = () => { document.getElementById('np-play').textContent = '⏸'; start_viz() }
+AUDIO.onpause = () => { document.getElementById('np-play').textContent = '▶'; stop_viz() }
 AUDIO.onended = () => {
   if (randomMode) {
     playRandom()
@@ -211,12 +209,13 @@ const playIdx = (idx) => {
   AUDIO.play()
   refreshNowPlaying()
   refreshHighlight()
+  on_track_change()
 }
 
 const playFrom = (albumId, fileId) => {
   const reg = TRACK_REG[albumId]
   if (!reg) return
-  const filtered = reg.tracks.filter(t => !isTypeOff(albumId, t.media_type))
+  const filtered = reg.tracks.filter(t => !isTypeOff(albumId, t.media_type) && (t.rating ?? 0) >= 0)
   const idx = filtered.findIndex(t => t.file_id === fileId)
   if (idx < 0) return
   player.albumId = albumId
@@ -228,11 +227,9 @@ const playFrom = (albumId, fileId) => {
 const stopPlayback = () => {
   AUDIO.pause()
   AUDIO.src = ''
-  player.albumId = null
-  player.tracks  = []
-  player.idx     = -1
-  document.getElementById('now-playing').style.display = 'none'
+  stop_viz()
   refreshHighlight()
+  _clear_img?.(document.getElementById('corner-art'))
 }
 
 const skipTrack = () => {
@@ -247,27 +244,42 @@ const togglePlayPause = () => {
   if (AUDIO.paused) { AUDIO.play() } else { AUDIO.pause() }
 }
 
+
 const toggleRandom = () => {
   randomMode = !randomMode
   document.getElementById('np-random').classList.toggle('active', randomMode)
 }
 
+const toggleNpExpand = () => {
+  const body = document.getElementById('np-body')
+  const btn  = document.getElementById('np-expand')
+  const open = body.style.display === 'none'
+  body.style.display = open ? '' : 'none'
+  btn.textContent = open ? '▾' : '▸'
+}
+
 const playRandom = async () => {
-  const pool = [...ALL_ST_ALBUMS, ...ALL_DM_ALBUMS]
+  const pool = [...ALL_ST_ALBUMS, ...ALL_DM_ALBUMS].filter(a => (a.album_rating ?? 0) >= 0)
   if (!pool.length) return
   const album = pool[Math.floor(Math.random() * pool.length)]
   const scanType = ALL_ST_ALBUMS.includes(album) ? 'music' : 'files'
   const prefix = scanType === 'music' ? 'st' : 'dm'
   const albumId = prefix + '_' + encodeURIComponent(album.title).replace(/'/g, '%27')
-  const urlFn = t => `${API}/media/${t.file_id}`
-  const tracks = await fetch(`${API}/api/album/tracks?title=${encodeURIComponent(album.title)}&scan_type=${scanType}`).then(r => r.json())
+  const urlFn = t => `/media/${t.file_id}`
+  const tracks = await fetch(`/api/album/tracks?title=${encodeURIComponent(album.title)}&scan_type=${scanType}`).then(r => r.json())
   if (!tracks.length) return
   const types = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
   if (!TRACK_REG[albumId]) {
-    TRACK_REG[albumId] = { tracks, urlFn, allTypes: types, title: album.title, scanType }
+    TRACK_REG[albumId] = { tracks, urlFn, allTypes: types, title: album.title, scanType,
+      capsule_image:         album.capsule_image         || null,
+      logo_url:              album.logo_url              || null,
+      lc_capsule_url:        album.lc_capsule_url        || null,
+      details_capsule_image: album.details_capsule_image || null,
+    }
   }
-  const filtered = tracks.filter(t => !isTypeOff(albumId, t.media_type))
-  const queue = filtered.length ? filtered : tracks
+  const filtered = tracks.filter(t => !isTypeOff(albumId, t.media_type) && (t.rating ?? 0) >= 0)
+  const queue = filtered.length ? filtered : tracks.filter(t => (t.rating ?? 0) >= 0)
+  if (!queue.length) return
   player.albumId = albumId
   player.tracks  = queue
   player.urlFn   = urlFn
@@ -277,10 +289,486 @@ const playRandom = async () => {
 const playBtnClick = (btn) => {
   if (btn.dataset.queueIdx !== undefined) {
     playIdx(parseInt(btn.dataset.queueIdx))
-  } else {
-    playFrom(btn.dataset.albumId, parseInt(btn.dataset.fileId))
+    return
+  }
+  const albumId = btn.dataset.albumId
+  const fileId  = parseInt(btn.dataset.fileId)
+  const reg     = TRACK_REG[albumId]
+  if (!reg) return
+  const track = reg.tracks.find(t => t.file_id === fileId)
+  if (track && (track.rating ?? 0) < 0) {
+    AUDIO.src = reg.urlFn(track)
+    AUDIO.play()
+    document.getElementById('np-filename').textContent = track.file_name
+    return
+  }
+  playFrom(albumId, fileId)
+}
+
+// ── visualizer ────────────────────────────────────────────────────────────────
+
+const VIZ_HTML = `<!DOCTYPE html><html><head><style>
+*{margin:0;padding:0}body{background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}
+</style></head><body><canvas id="c"></canvas><script>
+const canvas=document.getElementById('c')
+const gl=canvas.getContext('webgl')
+const resize=()=>{canvas.width=innerWidth;canvas.height=innerHeight;gl.viewport(0,0,canvas.width,canvas.height)}
+window.addEventListener('resize',resize);resize()
+gl.clearColor(0,0,0,1);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE)
+
+const VERT='attribute vec2 a_pos;void main(){gl_Position=vec4(a_pos,0,1);}'
+const PAL='vec3 pal(float t,sampler2D s){t=fract(t);return texture2D(s,vec2(t,t)).rgb;}'
+const HASH='float hash(vec2 p){p=fract(p*vec2(443.897,441.423));p+=dot(p,p.yx+19.19);return fract(p.x*p.y);}'
+
+const FRAGS_A=[\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5)*vec2(u_res.x/u_res.y,1.);
+  float t=u_time*.35,e=.08+u_bass*.92+u_beat*.3;
+  uv*=1.+u_bass*.8+u_beat*.4;
+  float v=sin(uv.x*3.+t+u_bass*5.)+sin(uv.y*2.5-t*.9+u_mid*3.)
+         +sin((uv.x+uv.y)*4.5+t*1.2)+sin(length(uv)*7.-t*2.5+u_bass*8.);
+  v=v*.125+.5;
+  float v2=(sin(uv.x*5.-t*1.5+u_treble*4.)+sin(uv.y*6.+t*.8))*.25+.5;
+  gl_FragColor=vec4((pal(v,u_palette)*.7+pal(v2,u_palette)*.3)*e,u_alpha);
+}\`,
+\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5);uv.x*=u_res.x/u_res.y;
+  float a=atan(uv.y,uv.x),d=length(uv),t=u_time*.5;
+  float v=fract(.25/(d+.001)+t+u_bass*.8+a/6.28318+u_mid*.4+t*.1);
+  float ring=1.-smoothstep(0.,.03,abs(fract(d*3.-t*2.+u_bass*2.)-.5));
+  vec3 col=pal(v,u_palette)+ring*pal(fract(v+.5),u_palette)*u_beat;
+  col*=(.1+u_bass*.9)*(1.-smoothstep(.7,1.3,d));
+  gl_FragColor=vec4(col,u_alpha);
+}\`,
+\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5);uv.x*=u_res.x/u_res.y;
+  float t=u_time*.15,N=floor(4.+u_mid*5.)*2.;
+  float a=atan(uv.y,uv.x),d=length(uv),seg=6.28318/N;
+  a=mod(a,seg);if(a>seg*.5)a=seg-a;
+  vec2 p=vec2(cos(a),sin(a))*d*(1.5+u_bass)+vec2(t*.4,t*.25);
+  float v=(sin(p.x*4.+t)*sin(p.y*3.-t*.8)+sin(length(p)*6.-t*2.+u_bass*5.))*.25+.5;
+  float v2=cos(p.x*2.5-p.y*3.5+t*1.3)*.5+.5;
+  gl_FragColor=vec4((pal(v,u_palette)*.6+pal(v2,u_palette)*.4)*(.12+u_bass*.88+u_beat*.3),u_alpha);
+}\`,
+\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5)*vec2(u_res.x/u_res.y,1.);
+  float t=u_time*.25,a=atan(uv.y,uv.x),d=length(uv);
+  float an=(a+3.14159)/6.28318;
+  float wave=texture2D(u_wave,vec2(an,.5)).r*2.-1.;
+  float freq=texture2D(u_freq,vec2(an,.5)).r;
+  float r=.30+u_bass*.08+wave*.10*(1.+u_bass*1.5)+u_beat*.04;
+  float line=1.-smoothstep(0.,.012,abs(d-r));
+  float bg=(1.-smoothstep(0.,.003,abs(d-.135)))*.4+(1.-smoothstep(0.,.003,abs(d-.27)))*.2
+          +(1.-smoothstep(0.,.003,abs(d-.405)))*.13+(1.-smoothstep(0.,.003,abs(d-.54)))*.1;
+  gl_FragColor=vec4((line*pal(an+t,u_palette)+bg*.25*pal(freq,u_palette))*(.1+u_bass*.9+u_beat*.4),u_alpha);
+}\`,
+\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+float h(vec2 p){p=fract(p*vec2(443.9,397.3));p+=dot(p,p+19.19);return fract(p.x*p.y);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<6;i++){v+=a*n(p);p=p*2.1+vec2(1.7,9.2);a*=.5;}return v;}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5)*vec2(u_res.x/u_res.y,1.);
+  float t=u_time*.08,e=.08+u_bass*.92+u_beat*.5;
+  vec2 p=uv*(1.5+u_mid)+t;
+  float d=.5+.5*sin(fbm(p+fbm(p+fbm(p)))*6.28318+u_bass*3.+t*2.);
+  float d2=.5+.5*cos(fbm(p*1.5+u_treble*.5+3.7)*6.28318-t);
+  gl_FragColor=vec4((pal(d,u_palette)*.7+pal(d2,u_palette)*.3)*e,u_alpha);
+}\`]
+
+const FRAGS_B=[\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+\${HASH}
+void main(){
+  vec2 uv=gl_FragCoord.xy/u_res;
+  float ar=u_res.x/u_res.y,t=u_time;
+  vec3 col=vec3(0.);
+  for(int i=0;i<7;i++){
+    float fi=float(i),depth=(fi+1.)/7.,ybase=.08+fi*.125;
+    float f1=(2.+fi*.9)*6.28318,f2=(.8+fi*.4)*6.28318,spd=.35+fi*.12;
+    float amp=(.03+u_bass*.11)*depth;
+    float wy=ybase+sin(uv.x*f1+t*spd+u_mid*2.)*amp+sin(uv.x*f2-t*spd*.7)*amp*.4;
+    float dd=abs(uv.y-wy),w=.0018+depth*.0025+u_bass*.002;
+    col+=pal(ybase*.5+t*.04+fi*.07,u_palette)*exp(-dd/w)*depth*(.5+u_bass*.5+u_beat*.4);
+    float sdens=6.+fi*1.5,sx=floor(uv.x*sdens);
+    float spt=fract(t*(.7+fi*.1)+hash(vec2(sx,fi)));
+    float slife=smoothstep(0.,.2,spt)*smoothstep(1.,.4,spt);
+    float sact=step(.3+u_bass*.25,hash(vec2(sx,fi+17.)));
+    float scx=(sx+.5)/sdens;
+    float scy=ybase+sin(scx*f1+t*spd+u_mid*2.)*amp+sin(scx*f2-t*spd*.7)*amp*.4;
+    float spx=scx+(hash(vec2(sx+200.,fi))-.5)*.09*spt;
+    float spy=scy+(hash(vec2(sx+100.,fi))-.5)*.28*spt;
+    float ddx=(uv.x-spx)*ar,ddy=uv.y-spy;
+    float sg=exp(-sqrt(ddx*ddx+ddy*ddy)/(.005*(1.+u_beat*.7)))*slife*sact*(1.+u_bass*.6);
+    col+=pal(ybase+.35+fi*.05,u_palette)*sg*2.5;
+  }
+  gl_FragColor=vec4(col,u_alpha);
+}\`,\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${PAL}
+void main(){
+  float ar=u_res.x/u_res.y;
+  vec2 uv=vec2(gl_FragCoord.x/u_res.x*ar,gl_FragCoord.y/u_res.y);
+  float t=u_time;
+  vec3 col=vec3(0.);
+  for(int fi=0;fi<4;fi++){
+    float f=float(fi),ph=f*1.618+1.234,ph2=f*2.397+0.813,spd=0.55+f*0.21;
+    vec3 fly_col=pal(f*.25+t*.02,u_palette)*3.;
+    for(int s=0;s<24;s++){
+      float age=float(s)/24.,ts=t-age*3.5*(.5+u_bass*.5);
+      float px=(.5+.38*cos(ts*spd+ph)+.1*cos(ts*spd*2.7+ph2))*ar;
+      float py=.5+.32*sin(ts*(spd*.73)+ph*.8)+.1*sin(ts*(spd*1.9)+ph2*.6)+u_bass*.05*sin(ts*2.8+f);
+      vec2 dv=uv-vec2(px,py);
+      float r=.014*(1.+u_beat*.5)*(1.-age*.72)*(1.+u_bass*.35);
+      float b=exp(-dot(dv,dv)/(r*r))*(1.-age)*(1.-age);
+      col+=fly_col*b*(1.+u_beat*(1.-age)*1.5);
+    }
+  }
+  gl_FragColor=vec4(col,u_alpha);
+}\`,\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${HASH}
+float N(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*N(p);p=p*2.1+vec2(1.7,9.2);a*=.5;}return v;}
+vec3 spal(float t){
+  t=fract(t);
+  vec3 c=vec3(.07,.00,.00);
+  c=mix(c,vec3(.62,.02,.00),smoothstep(0.,.28,t));
+  c=mix(c,vec3(.95,.17,.00),smoothstep(.28,.55,t));
+  c=mix(c,vec3(1.,.52,.02),smoothstep(.55,.80,t));
+  c=mix(c,vec3(1.,.90,.20),smoothstep(.80,1.,t));
+  return c;
+}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5)*vec2(u_res.x/u_res.y,1.);
+  float t=u_time*.18;
+  float blink=pow(max(0.,sin(u_time*.43+.5)*sin(u_time*.71+1.8)*sin(u_time*1.13)),4.);
+  float open=1.-blink;
+  float ev=.34,ew_h=(.095+u_bass*.02+u_beat*.012)*open+.003;
+  float yn=uv.y/ev;
+  float half_w=ew_h*sqrt(max(0.,1.-yn*yn));
+  float eye=smoothstep(half_w+.005,half_w-.005,abs(uv.x))*smoothstep(1.05,.95,abs(yn));
+  vec2 ec=vec2(uv.x/max(ew_h,.003),uv.y/ev);
+  float ir=length(ec);
+  vec2 gaze=vec2(sin(u_time*.07)*.06,cos(u_time*.11+1.)*.10);
+  vec2 fuv=(ec-gaze)*1.2+vec2(t*.2,t*.55);
+  float fv=fbm(fuv+u_bass*.65)*.6+fbm(fuv*1.4-vec2(t*.1,t*.3)+u_mid*.35)*.4;
+  float iglow=(1.-smoothstep(0.,.88,ir))*(.25+u_bass*.75+u_beat*.5)+exp(-abs(ir-.68)*14.)*.4;
+  vec3 iris=spal(fv*.8+.1)*iglow;
+  float ph=max(.015,(0.02+u_bass*.07)*ev);
+  float pd=length(vec2(uv.x/max(ew_h*.90,.003),uv.y/ph));
+  float pupil=smoothstep(1.1,.80,pd)*eye;
+  vec3 pc=spal(.03)*(.3+u_bass*.4);
+  vec3 ecol=mix(iris,pc,pupil);
+  float cor=exp(-max(0.,ir-.90)*4.)*(.15+u_bass*.85+u_beat*.70);
+  vec3 ccol=spal(fv*.5+.05)*cor;
+  float atm=fbm(uv*2.+vec2(t*.04,-t*.06));
+  vec3 bg=spal(atm*.3+.08)*atm*(.03+u_bass*.05);
+  float fw=.095*sqrt(max(0.,1.-yn*yn));
+  float ylid=smoothstep(1.04,.93,abs(yn));
+  float lid=(smoothstep(fw+.01,fw-.01,abs(uv.x))-eye)*ylid*blink;
+  vec3 lc=spal(.12+fbm(uv*5.+t*.12)*.08)*.18;
+  vec3 col=bg+ccol+ecol*eye+lc*lid;
+  col+=spal(.92)*u_beat*.5*smoothstep(1.4,.6,ir);
+  gl_FragColor=vec4(col,u_alpha);
+}\`]
+
+const compile=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(s));return s}
+const quad=(()=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);return b})()
+const build_prog=src=>{
+  const p=gl.createProgram()
+  gl.attachShader(p,compile(gl.VERTEX_SHADER,VERT));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,src))
+  gl.linkProgram(p);gl.useProgram(p)
+  gl.bindBuffer(gl.ARRAY_BUFFER,quad)
+  const loc=gl.getAttribLocation(p,'a_pos')
+  gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0)
+  const U=n=>gl.getUniformLocation(p,n)
+  return{p,Ut:U('u_time'),Ub:U('u_bass'),Um:U('u_mid'),Utr:U('u_treble'),Ube:U('u_beat'),
+         Ur:U('u_res'),Up:U('u_palette'),Uw:U('u_wave'),Uf:U('u_freq'),Ua:U('u_alpha')}
+}
+const mk_tex=(w,h,d)=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,d);return t}
+const dflt_pal=()=>{const d=new Uint8Array(256);
+  for(let i=0;i<64;i++){const t=i/63;d[i*4]=(t*180+10)|0;d[i*4+1]=(t*20)|0;d[i*4+2]=(t*230+25)|0;d[i*4+3]=255}
+  return d}
+const pal_tex =mk_tex(8,8,dflt_pal())
+const wave_tex=mk_tex(256,1,new Uint8Array(1024).fill(128))
+const freq_tex=mk_tex(128,1,new Uint8Array(512).fill(0))
+const up_gray=(tex,w,h,src)=>{
+  const d=new Uint8Array(w*h*4)
+  for(let i=0;i<w*h;i++){const v=src[i]??128;d[i*4]=d[i*4+1]=d[i*4+2]=v;d[i*4+3]=255}
+  gl.bindTexture(gl.TEXTURE_2D,tex)
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,d)
+}
+
+const PROGS_A=FRAGS_A.map(build_prog)
+const PROGS_B=FRAGS_B.map(build_prog)
+let bass=0,mid=0,treble=0,beat=0,viz_time=0
+const FADE=1.5
+const DURS=[[6,8,12],[2,4,8],[16]]
+const ALPHAS=[.55,.45,.38]
+const ns=()=>performance.now()/1000
+const rnd=(n,x=-1)=>{if(n<=1)return 0;let r;do{r=Math.floor(Math.random()*n)}while(r===x);return r}
+const pdur=(d)=>d[Math.floor(Math.random()*d.length)]
+const layers=[
+  {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([6,8,12])},
+  {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([2,4,8])},
+  {progs:PROGS_B,cur:rnd(PROGS_B.length),next:-1,fs:0,ts:ns(),dur:pdur([6,8,12])},
+]
+
+const draw=(po,alpha)=>{
+  const{p,Ut,Ub,Um,Utr,Ube,Ur,Up,Uw,Uf,Ua}=po
+  gl.useProgram(p)
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,pal_tex);gl.uniform1i(Up,0)
+  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,wave_tex);gl.uniform1i(Uw,1)
+  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,freq_tex);gl.uniform1i(Uf,2)
+  gl.uniform1f(Ut,viz_time);gl.uniform1f(Ub,bass);gl.uniform1f(Um,mid)
+  gl.uniform1f(Utr,treble);gl.uniform1f(Ube,beat)
+  gl.uniform2f(Ur,canvas.width,canvas.height)
+  gl.uniform1f(Ua,alpha)
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4)
+}
+
+window.addEventListener('message',e=>{
+  const d=e.data;if(!d?.viz)return
+  if(d.bass!==undefined)bass=d.bass
+  if(d.mid!==undefined)mid=d.mid
+  if(d.treble!==undefined)treble=d.treble
+  if(d.beat!==undefined)beat=d.beat
+  if(d.time!==undefined)viz_time=d.time
+  if(d.wave)up_gray(wave_tex,256,1,d.wave)
+  if(d.freq)up_gray(freq_tex,128,1,d.freq)
+  if(d.palette){
+    const w=d.pal_w||8,h=d.pal_h||8
+    gl.bindTexture(gl.TEXTURE_2D,pal_tex)
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(d.palette))
+  }
+  if(d.reset){
+    const t=ns()
+    for(const l of layers){l.next=rnd(l.progs.length,l.cur);l.fs=t}
+  }
+})
+
+const render=()=>{
+  requestAnimationFrame(render)
+  gl.clear(gl.COLOR_BUFFER_BIT)
+  const t=ns()
+  for(let i=0;i<3;i++){
+    const l=layers[i],ba=ALPHAS[i]
+    if(l.next===-1&&t-l.ts>=l.dur){l.next=rnd(l.progs.length,l.cur);l.fs=t}
+    if(l.next!==-1){
+      const ft=Math.min(1,(t-l.fs)/FADE)
+      draw(l.progs[l.cur],ba*(1-ft))
+      draw(l.progs[l.next],ba*ft)
+      if(ft>=1){l.cur=l.next;l.next=-1;l.ts=t;l.dur=pdur(DURS[i])}
+    }else{
+      draw(l.progs[l.cur],ba)
+    }
   }
 }
+render()
+<\/script></body></html>`
+
+const VIZ_IFRAME = document.getElementById('visualizer')
+VIZ_IFRAME.src = URL.createObjectURL(new Blob([VIZ_HTML], { type: 'text/html' }))
+
+const BODY_BG_VIZ     = 'rgba(14, 8, 32, 0.65)'
+const BODY_BG_DEFAULT = 'linear-gradient(160deg, #0e0820 0%, #160d30 50%, #0c0618 100%)'
+const FREQ_BINS = 128
+const WAVE_BINS = 256
+const freq_data = new Uint8Array(FREQ_BINS)
+const wave_data = new Uint8Array(WAVE_BINS)
+let audio_ctx = null
+let analyser   = null
+let viz_raf    = null
+let viz_start  = null
+let beat          = 0
+let prev_bass     = 0
+let last_beat_t   = 0
+const ensure_audio_ctx = () => {
+  if (audio_ctx) return
+  audio_ctx = new AudioContext()
+  const source = audio_ctx.createMediaElementSource(AUDIO)
+  analyser = audio_ctx.createAnalyser()
+  analyser.fftSize = WAVE_BINS
+  analyser.smoothingTimeConstant = 0.82
+  source.connect(analyser)
+  analyser.connect(audio_ctx.destination)
+}
+
+const freq_avg = (lo, hi) => {
+  let s = 0
+  for (let i = lo; i < hi; i++) s += freq_data[i]
+  return s / ((hi - lo) * 255)
+}
+
+let _colors_pool = null
+
+const load_colors = async () => {
+  if (_colors_pool) return _colors_pool
+  const { colors } = await import('/colors.js')
+  _colors_pool = colors.flatMap(hex_str => {
+    const c = hex_str.replace('#', '')
+    let r, g, b, a
+    if (c.length === 8) {
+      a = parseInt(c.slice(0, 2), 16)
+      r = parseInt(c.slice(2, 4), 16)
+      g = parseInt(c.slice(4, 6), 16)
+      b = parseInt(c.slice(6, 8), 16)
+    } else if (c.length === 6) {
+      r = parseInt(c.slice(0, 2), 16)
+      g = parseInt(c.slice(2, 4), 16)
+      b = parseInt(c.slice(4, 6), 16)
+      a = 255
+    } else {
+      return []
+    }
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return []
+    if (a < 0xaa) return []
+    if (Math.max(r, g, b) < 55) return []
+    if (Math.max(r, g, b) - Math.min(r, g, b) < 30) return []
+    return [[r, g, b]]
+  })
+  return _colors_pool
+}
+
+const gen_palette = (pool) => {
+  const PAL_W = 64
+  const n = 5 + Math.floor(Math.random() * 6)
+  const anchors = Array.from({ length: n }, () => pool[Math.floor(Math.random() * pool.length)])
+  const d = new Uint8Array(PAL_W * 4)
+  for (let i = 0; i < PAL_W; i++) {
+    const t  = (i / PAL_W) * n
+    const ia = Math.floor(t) % n
+    const ib = (ia + 1) % n
+    const f  = t - Math.floor(t)
+    d[i*4]   = anchors[ia][0] * (1 - f) + anchors[ib][0] * f | 0
+    d[i*4+1] = anchors[ia][1] * (1 - f) + anchors[ib][1] * f | 0
+    d[i*4+2] = anchors[ia][2] * (1 - f) + anchors[ib][2] * f | 0
+    d[i*4+3] = 255
+  }
+  return { data: Array.from(d), w: PAL_W, h: 1 }
+}
+
+const send_palette = async () => {
+  const pool = await load_colors()
+  const p = gen_palette(pool)
+  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: p.data, pal_w: p.w, pal_h: p.h }, '*')
+}
+
+const on_track_change = () => {
+  VIZ_IFRAME.contentWindow?.postMessage({ viz: true, reset: true }, '*')
+  send_palette()
+  const reg = TRACK_REG[player.albumId]
+  const urls   = [reg?.logo_url, reg?.lc_capsule_url, reg?.details_capsule_image, reg?.capsule_image]
+  const scales = [0.3, 1.0, 1.0, 1.0]
+  _coalesce_img?.(document.getElementById('corner-art'), urls, scales)
+}
+
+const start_viz = () => {
+  ensure_audio_ctx()
+  if (audio_ctx.state === 'suspended') audio_ctx.resume()
+  if (!viz_start) viz_start = performance.now()
+  if (!viz_hidden) VIZ_IFRAME.style.opacity = '1'
+  document.body.style.background = BODY_BG_VIZ
+  send_palette()
+  if (viz_raf) return
+  let last_palette_t = 0
+  const PALETTE_INTERVAL = 25
+  const tick = () => {
+    viz_raf = requestAnimationFrame(tick)
+    analyser.getByteFrequencyData(freq_data)
+    analyser.getByteTimeDomainData(wave_data)
+    const t        = (performance.now() - viz_start) / 1000
+    const raw_bass = freq_avg(0, 8)
+    const raw_mid  = freq_avg(8, 48)
+    const raw_treble = freq_avg(48, 128)
+    if (raw_bass > prev_bass * 1.35 && raw_bass > 0.15 && t - last_beat_t > 0.1) {
+      beat = 1.0
+      last_beat_t = t
+    }
+    if (t - last_palette_t >= PALETTE_INTERVAL) {
+      last_palette_t = t
+      send_palette()
+    }
+    beat     *= 0.88
+    prev_bass = prev_bass * 0.8 + raw_bass * 0.2
+    VIZ_IFRAME.contentWindow?.postMessage({
+      viz: true,
+      bass:   raw_bass,
+      mid:    raw_mid,
+      treble: raw_treble,
+      beat,
+      wave:   Array.from(wave_data),
+      freq:   Array.from(freq_data),
+      time:   t,
+    }, '*')
+  }
+  viz_raf = requestAnimationFrame(tick)
+}
+
+const stop_viz = () => {
+  if (viz_raf) { cancelAnimationFrame(viz_raf); viz_raf = null }
+  beat = 0; prev_bass = 0
+  VIZ_IFRAME.style.opacity = '0'
+  document.body.style.background = BODY_BG_DEFAULT
+}
+
+let viz_hidden = false
+const toggle_viz = () => {
+  viz_hidden = !viz_hidden
+  VIZ_IFRAME.style.opacity = viz_hidden ? '0' : (viz_raf ? '1' : '0')
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Backspace') return
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+  e.preventDefault()
+  toggle_viz()
+})
+
+// ── fullscreen ────────────────────────────────────────────────────────────────
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    document.exitFullscreen()
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('np-fullscreen').classList.toggle('active', !!document.fullscreenElement)
+})
 
 // ── section collapse ──────────────────────────────────────────────────────────
 
@@ -294,8 +782,12 @@ const toggleSection = (h2) => {
 
 let TYPE_ORDER = []  // lowercase, config priority order
 
-const TRACK_REG = {}  // albumId -> { tracks, urlFn, allTypes, title, scanType }
-const TYPE_OFF  = {}  // albumId -> Set<type>
+const TRACK_REG    = {}  // albumId -> { tracks, urlFn, allTypes, title, scanType, ...image fields }
+const TYPE_OFF     = {}  // albumId -> Set<type>
+const ALBUM_IMAGES = {}  // albumId -> { capsule_image, logo_url, lc_capsule_url, details_capsule_image }
+
+let _coalesce_img = null
+let _clear_img    = null
 
 const isTypeOff = (albumId, type) => !!(TYPE_OFF[albumId] && TYPE_OFF[albumId].has(type))
 
@@ -312,7 +804,7 @@ const typeToggleClick = (evt, albumId, type, btn) => {
   filterTypeRows(albumId)
   if (player.albumId === albumId && TRACK_REG[albumId]) {
     const cur = player.tracks[player.idx]
-    player.tracks = TRACK_REG[albumId].tracks.filter(t => !isTypeOff(albumId, t.media_type))
+    player.tracks = TRACK_REG[albumId].tracks.filter(t => !isTypeOff(albumId, t.media_type) && (t.rating ?? 0) >= 0)
     player.idx = cur ? player.tracks.findIndex(t => t.file_id === cur.file_id) : -1
     refreshNowPlaying()
   }
@@ -349,10 +841,16 @@ const filterTypeRows = (albumId) => {
 
 const refreshNowPlaying = () => {
   const bar = document.getElementById('now-playing')
-  if (player.idx < 0 || !player.tracks.length) { bar.style.display = 'none'; return }
-  bar.style.display = 'block'
-  document.getElementById('np-filename').textContent = player.tracks[player.idx].file_name
-  document.getElementById('np-tracks').innerHTML = tracksTable(player.tracks, player.urlFn, null, true)
+  if (player.idx < 0 || !player.tracks.length) { return }
+  const t = player.tracks[player.idx]
+  document.getElementById('np-filename').textContent = t.file_name
+  document.getElementById('np-album').textContent = t.title || TRACK_REG[player.albumId]?.title || ''
+  const lib_img = TRACK_REG[player.albumId]?.capsule_image
+  const art_html = lib_img
+    ? `<img class="np-album-art" src="${esc(lib_img)}" alt="">`
+    : ''
+  document.getElementById('np-tracks').innerHTML =
+    `<div class="np-queue-layout"><div class="np-queue-list">${tracksTable(player.tracks, player.urlFn, null, true)}</div></div>`
   refreshHighlight()
 }
 
@@ -368,42 +866,46 @@ const refreshHighlight = () => {
 const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
   if (!tracks.length) return '<span class="msg">no tracks found</span>'
   const rows = tracks.map((t, i) => {
-    const url    = urlFn(t)
-    const kb     = t.size ? (t.size / 1024).toFixed(0) + ' KB' : ''
-    const hidden = !fromQueue && albumId && isTypeOff(albumId, t.media_type) ? ' style="display:none"' : ''
+    const url     = urlFn(t)
+    const kb      = t.size ? (t.size / 1024).toFixed(0) + ' KB' : ''
+    const plays   = t.play_count > 0 ? t.play_count : ''
+    const rating  = t.rating ?? 0
+    const hidden  = !fromQueue && albumId && isTypeOff(albumId, t.media_type) ? ' style="display:none"' : ''
     const btnData = fromQueue
       ? `data-queue-idx="${i}"`
       : `data-album-id="${esc(albumId)}" data-file-id="${t.file_id}"`
-    return `<tr data-type="${esc(t.media_type)}" data-url="${esc(url)}"${hidden}>
+    const bannedCls = rating < 0 ? ' banned-track' : ''
+    const ratingCol = fromQueue ? '' : `<td>${rating_widget_html(t.join_key || '', 'track', rating)}</td>`
+    const sizeCol   = fromQueue ? '' : `<td class="dim">${esc(kb)}</td>`
+    const typeCol   = fromQueue ? '' : `<td><span class="badge">${esc(t.media_type)}</span></td>`
+    const classCol  = fromQueue ? '' : `<td><span class="badge">${esc(t.media_class || '')}</span>${t.lang ? `&thinsp;<span class="badge">${esc(t.lang)}</span>` : ''}</td>`
+    const pathCol   = SHOW_PATHS ? `<td class="dim">${esc(t.full_path)}</td>` : ''
+    return `<tr data-type="${esc(t.media_type)}" data-url="${esc(url)}"${hidden} class="${bannedCls}">
       <td class="play-col"><button class="play-btn" ${btnData} onclick="playBtnClick(this)">▶</button></td>
       <td>${esc(t.file_name)}</td>
-      <td><span class="badge">${esc(t.media_type)}</span></td>
-      <td class="dim">${esc(kb)}</td>
-      <td class="dim">${esc(t.full_path)}</td>
+      <td class="play-count">${plays}</td>
+      ${sizeCol}${ratingCol}${typeCol}${classCol}${pathCol}
     </tr>`
   }).join('')
-  return `<table><tr><th></th><th>file</th><th>type</th><th>size</th><th>path</th></tr>${rows}</table>`
+  const ratingTh = fromQueue ? '' : '<th></th>'
+  const sizeTh   = fromQueue ? '' : '<th>size</th>'
+  const typeTh   = fromQueue ? '' : '<th>type</th>'
+  const classTh  = fromQueue ? '' : '<th>class</th>'
+  const pathTh   = SHOW_PATHS ? '<th>path</th>' : ''
+  return `<table><tr><th></th><th>file</th><th>plays</th>${sizeTh}${ratingTh}${typeTh}${classTh}${pathTh}</tr>${rows}</table>`
 }
 
 // ── page build ────────────────────────────────────────────────────────────────
 
-const wait = ms => new Promise(r => setTimeout(r, ms))
-
-const fetch_retry = async (url, attempts = 20, delay = 500) => {
-  for (let i = 0; i < attempts; i++) {
-    try { return await fetch(url) } catch (_) {}
-    document.getElementById('summary').textContent = `connecting to server… (${i + 1})`
-    await wait(delay)
-  }
-  throw new Error('server unavailable')
-}
-
 async function load() {
-  const [sumRes, stRes, dmRes] = await Promise.all([
-    fetch_retry(`${API}/api/summary`),
-    fetch_retry(`${API}/api/albums?scan_type=music`),
-    fetch_retry(`${API}/api/albums?scan_type=files`),
+  const [sumRes, stRes, dmRes, coalesce] = await Promise.all([
+    fetch('/api/summary'),
+    fetch('/api/albums?scan_type=music'),
+    fetch('/api/albums?scan_type=files'),
+    import('/ImgCoalesce.js'),
   ])
+  _coalesce_img = coalesce.coalesce_img
+  _clear_img    = coalesce.clear_img
   const sum    = await sumRes.json()
   const stList = await stRes.json()
   const dmList = await dmRes.json()
@@ -418,10 +920,14 @@ async function load() {
   const parts = [...orderedKeys, ...extraKeys].map(t =>
     `<strong>${byTypeMap[t].toLocaleString()}</strong>&thinsp;${t}`
   )
-  document.getElementById('summary').innerHTML =
+  const classParts = (sum.by_class || []).map(r =>
+    `<strong>${r.count.toLocaleString()}</strong>&thinsp;${r.media_class}`
+  )
+  document.getElementById('footer').innerHTML =
     `<strong>${sum.total.toLocaleString()}</strong> files &nbsp;·&nbsp; ` + parts.join(' &nbsp;·&nbsp; ')
     + ` &nbsp;|&nbsp; <strong>${(sum.soundtracks||0).toLocaleString()}</strong> sound tracks`
     + ` &nbsp;·&nbsp; <strong>${(sum.discovered||0).toLocaleString()}</strong> media collections`
+    + (classParts.length ? ` &nbsp;|&nbsp; ` + classParts.join(' &nbsp;·&nbsp; ') : '')
 
   document.getElementById('st-count').textContent = `${stList.length.toLocaleString()} titles`
   document.getElementById('dm-count').textContent = `${dmList.length.toLocaleString()} collections`
@@ -440,36 +946,71 @@ const initTypeDefaults = (albumId, types) => {
   }
 }
 
+function buildAlbumEntry(a, scanType, prefix) {
+  const types = (a.types || '').split(',').filter(Boolean).sort()
+  const id    = prefix + '_' + encodeURIComponent(a.title).replace(/'/g, '%27')
+
+  ALBUM_IMAGES[id] = {
+    capsule_image:         a.capsule_image         || null,
+    logo_url:              a.logo_url              || null,
+    lc_capsule_url:        a.lc_capsule_url        || null,
+    details_capsule_image: a.details_capsule_image || null,
+  }
+  initTypeDefaults(id, types)
+
+  const div = document.createElement('div')
+  div.className    = 'album-entry'
+  div.dataset.name = (a.title || '').toLowerCase()
+
+  const badgesHtml = types.map(t => {
+    const off = isTypeOff(id, t) ? ' off' : ''
+    return `<button class="type-toggle${off}" onclick="typeToggleClick(event,'${id}','${esc(t)}',this)">${esc(t)}</button>`
+  }).join('')
+
+  const floppyHtml = `<button class="floppy-btn" id="fl-${esc(id)}" data-album-id="${esc(id)}" onclick="floppyClick(event,this)" title="Save VLC playlist">💾</button>`
+
+  const albumKey    = a.album_key || ''
+  const albumRating = a.album_rating ?? 0
+  const plays       = a.album_play_count > 0 ? `<span class="album-plays">${a.album_play_count.toLocaleString()} plays</span>` : ''
+
+  div.innerHTML = `
+    <div class="row" data-title="${esc(a.title)}" data-scan-type="${esc(scanType)}" data-id="${esc(id)}" onclick="toggleAlbum(this)">
+      <span class="row-name">${esc(a.title)}</span>
+      <div class="badges">${badgesHtml}</div>
+      ${plays}
+      <span class="row-meta">${(a.track_count||0).toLocaleString()} files</span>
+      ${rating_widget_html(albumKey, 'album', albumRating)}
+      ${floppyHtml}
+    </div>
+    <div class="tracks-panel" id="tp-${esc(id)}"><span class="msg">loading…</span></div>`
+
+  if (albumRating < 0) div.classList.add('banned-album')
+  return div
+}
+
 function buildAlbums(albums, containerId, scanType, prefix) {
   const el = document.getElementById(containerId)
   if (!albums.length) { el.innerHTML = '<span class="msg">none found</span>'; return }
   el.innerHTML = ''
-  for (const a of albums) {
-    const types = (a.types || '').split(',').filter(Boolean).sort()
-    const id    = prefix + '_' + encodeURIComponent(a.title).replace(/'/g, '%27')
 
-    initTypeDefaults(id, types)
+  const normal = albums
+    .filter(a => (a.album_rating ?? 0) >= 0)
+    .sort((a, b) => {
+      const rd = (b.album_rating ?? 0) - (a.album_rating ?? 0)
+      return rd !== 0 ? rd : (a.title || '').localeCompare(b.title || '')
+    })
+  const banned = albums
+    .filter(a => (a.album_rating ?? 0) < 0)
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
 
-    const div   = document.createElement('div')
-    div.className    = 'album-entry'
-    div.dataset.name = (a.title || '').toLowerCase()
+  for (const a of normal) el.appendChild(buildAlbumEntry(a, scanType, prefix))
 
-    const badgesHtml = types.map(t => {
-      const off = isTypeOff(id, t) ? ' off' : ''
-      return `<button class="type-toggle${off}" onclick="typeToggleClick(event,'${id}','${esc(t)}',this)">${esc(t)}</button>`
-    }).join('')
-
-    const floppyHtml = `<button class="floppy-btn" id="fl-${esc(id)}" data-album-id="${esc(id)}" onclick="floppyClick(event,this)" title="Save VLC playlist">💾</button>`
-
-    div.innerHTML = `
-      <div class="row" data-title="${esc(a.title)}" data-scan-type="${esc(scanType)}" data-id="${esc(id)}" onclick="toggleAlbum(this)">
-        <span class="row-name">${esc(a.title)}</span>
-        <div class="badges">${badgesHtml}</div>
-        <span class="row-meta">${(a.track_count||0).toLocaleString()} files</span>
-        ${floppyHtml}
-      </div>
-      <div class="tracks-panel" id="tp-${esc(id)}"><span class="msg">loading…</span></div>`
-    el.appendChild(div)
+  if (banned.length) {
+    const hdr = document.createElement('div')
+    hdr.className = 'banned-section-hdr'
+    hdr.textContent = '── banned · not in rotation ──'
+    el.appendChild(hdr)
+    for (const a of banned) el.appendChild(buildAlbumEntry(a, scanType, prefix))
   }
 }
 
@@ -482,12 +1023,18 @@ async function toggleAlbum(row) {
   if (!open || panel.dataset.loaded) return
   panel.dataset.loaded = '1'
 
-  const urlFn  = t => `${API}/media/${t.file_id}`
-  const base   = `${API}/api/album/tracks?title=${encodeURIComponent(title)}&scan_type=${scanType}`
+  const urlFn  = t => `/media/${t.file_id}`
+  const base   = `/api/album/tracks?title=${encodeURIComponent(title)}&scan_type=${scanType}`
   const tracks = await fetch(base).then(r => r.json())
   const types  = [...new Set(tracks.map(t => t.media_type).filter(Boolean))].sort()
 
-  TRACK_REG[id] = { tracks, urlFn, allTypes: types, title, scanType }
+  const imgs = ALBUM_IMAGES[id] || {}
+  TRACK_REG[id] = { tracks, urlFn, allTypes: types, title, scanType,
+    capsule_image:         imgs.capsule_image         || null,
+    logo_url:              imgs.logo_url              || null,
+    lc_capsule_url:        imgs.lc_capsule_url        || null,
+    details_capsule_image: imgs.details_capsule_image || null,
+  }
 
   document.getElementById('fl-' + id)?.classList.add('loaded')
   panel.innerHTML = tracksTable(tracks, urlFn, id, false)
@@ -501,8 +1048,11 @@ function filterAll(q) {
   }
 }
 
-load().catch(e => {
-  document.getElementById('summary').textContent = 'Error: ' + e
+load().then(() => {
+  toggleRandom()
+  playRandom()
+}).catch(e => {
+  document.getElementById('footer').textContent = 'Error: ' + e
 })
 </script>
 </body>

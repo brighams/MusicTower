@@ -236,10 +236,10 @@ fn html(body: String) -> Response {
 
 fn error_page(msg: &str, href: &str, link_text: &str) -> String {
     format!(r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Setup — Starkeeper Media</title>{STYLE}</head><body>
+<title>Setup — MusicTower</title>{STYLE}</head><body>
 <div class="card">
   <div class="logo">⭐</div>
-  <h1>Starkeeper Media</h1>
+  <h1>MusicTower</h1>
   <p class="step">Setup</p>
   <div class="info" style="border-color:#c05050;background:#2a1818;">
     <strong style="color:#f88">Error:</strong> {msg}
@@ -250,10 +250,10 @@ fn error_page(msg: &str, href: &str, link_text: &str) -> String {
 
 fn apikey_page(steam_id: &str) -> String {
     format!(r##"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>API Key — Starkeeper Media</title>{STYLE}</head><body>
+<title>API Key — MusicTower</title>{STYLE}</head><body>
 <div class="card">
   <div class="logo">⭐</div>
-  <h1>Starkeeper Media</h1>
+  <h1>MusicTower</h1>
   <p class="step">Step 2 of 2 — Steam API Key</p>
   <div class="info">
     <strong style="color:#afa">✓ Signed in &nbsp;</strong>
@@ -277,7 +277,7 @@ fn apikey_page(steam_id: &str) -> String {
 }
 
 const DONE_HTML: &str = r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Setup Complete — Starkeeper Media</title>
+<title>Setup Complete — MusicTower</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font:15px/1.6 system-ui,monospace;background:#0e0e16;color:#ccc;
@@ -293,7 +293,7 @@ a{color:#66c0f4}
 </head><body>
 <div class="card">
   <div class="logo">⭐</div>
-  <h1>Starkeeper Media</h1>
+  <h1>MusicTower</h1>
   <p class="ok">✓ Setup complete!</p>
   <p>Your credentials have been saved to <code>.env</code>.<br>
   The scanner is now starting — this may take a moment.</p>
@@ -302,7 +302,7 @@ a{color:#66c0f4}
 </div></body></html>"#;
 
 const LOGIN_HTML: &str = r##"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Setup — Starkeeper Media</title>
+<title>Setup — MusicTower</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font:15px/1.6 system-ui,monospace;background:#0e0e16;color:#ccc;
@@ -328,7 +328,7 @@ h1{color:#e8c040;font-size:1.4em;margin-bottom:4px}
 </head><body>
 <div class="card">
   <div class="logo">⭐</div>
-  <h1>Starkeeper Media</h1>
+  <h1>MusicTower</h1>
   <p class="step">First-time Setup — Step 1 of 2</p>
   <div class="disclaimer">
     <strong>⚠ Independent project — not affiliated with Valve or Steam in any way.</strong>
