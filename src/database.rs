@@ -3,7 +3,22 @@ use regex::Regex;
 use rusqlite::{params, Connection, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
+
+pub fn make_placeholder_db() -> Arc<std::sync::Mutex<Connection>> {
+    let conn = Connection::open_in_memory().expect("in-memory placeholder db");
+    Arc::new(std::sync::Mutex::new(conn))
+}
+
+pub fn open_server_db(db_path: &str, player_db: &str) -> Result<Connection, Box<dyn std::error::Error>> {
+    let conn = Connection::open(db_path)?;
+    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
+    let escaped = player_db.replace('\'', "''");
+    conn.execute_batch(&format!("ATTACH DATABASE '{escaped}' AS pdb;"))
+        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach player.db: {e}"));
+    Ok(conn)
+}
 
 pub fn backup_and_init(db_path: &str) -> Result<Connection, Box<dyn std::error::Error>> {
     let path = Path::new(db_path);
@@ -81,7 +96,9 @@ fn create_schema(conn: &Connection) -> Result<()> {
             modified INTEGER NOT NULL,
             created INTEGER NOT NULL,
             join_key TEXT,
-            album_key TEXT
+            album_key TEXT,
+            media_class TEXT,
+            lang TEXT
         );
         CREATE INDEX idx_steam_apps_appid ON steam_apps (appid);
         CREATE INDEX idx_steam_apps_name ON steam_apps (name);
@@ -92,7 +109,8 @@ fn create_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX idx_steam_files_file_name ON steam_files (file_name);
         CREATE INDEX idx_steam_files_appid ON steam_files (appid);
         CREATE INDEX idx_steam_files_join_key ON steam_files (join_key);
-        CREATE INDEX idx_steam_files_album_key ON steam_files (album_key);",
+        CREATE INDEX idx_steam_files_album_key ON steam_files (album_key);
+        CREATE INDEX idx_steam_files_media_class ON steam_files (media_class);",
     )
 }
 
@@ -188,7 +206,7 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     let tx = conn.transaction()?;
     {
         let mut stmt = tx.prepare(
-            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO steam_files VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )?;
 
         for (i, (path, scan_root)) in files.iter().enumerate() {
@@ -244,6 +262,8 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 .map(millis_since_epoch)
                 .unwrap_or(0);
 
+            let (media_class, lang) = classify_media(&path_str);
+
             stmt.execute(params![
                 media_type.as_str(),
                 appid,
@@ -257,6 +277,8 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
                 created,
                 join_key,
                 album_key,
+                media_class,
+                lang,
             ])?;
 
             if (i + 1) % 10_000 == 0 {
@@ -267,6 +289,47 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
     tx.commit()?;
     println!("DB: Inserted {} total files", files.len());
     Ok(())
+}
+
+fn classify_media(path_str: &str) -> (String, Option<String>) {
+    let lower = path_str.to_lowercase();
+
+    if lower.contains("audiobook") || lower.contains("audio book") {
+        return ("audiobook".to_owned(), None);
+    }
+
+    let is_effect = lower.contains("effects")
+        || lower.contains("soundeffects")
+        || lower.contains("/sfx/")
+        || lower.contains("/fx/");
+
+    if is_effect {
+        return ("effect".to_owned(), None);
+    }
+
+    const LANG_CODES: &[&str] = &[
+        "en", "de", "fr", "es", "sv", "pt", "nl", "it",
+        "zh", "cs", "hr", "pl", "ro", "ru", "sk", "tr",
+    ];
+
+    for code in LANG_CODES {
+        if lower.contains(&format!("/{code}/")) || lower.contains(&format!("_{code}/")) {
+            return ("voice".to_owned(), Some(code.to_string()));
+        }
+    }
+
+    let is_voice = lower.contains("voice")
+        || lower.contains("localization")
+        || lower.contains("localized")
+        || lower.contains("locale")
+        || lower.contains("language")
+        || lower.contains("speech");
+
+    if is_voice {
+        return ("voice".to_owned(), None);
+    }
+
+    ("music".to_owned(), None)
 }
 
 fn millis_since_epoch(t: SystemTime) -> i64 {

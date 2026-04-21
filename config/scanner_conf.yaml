@@ -11,4 +11,17 @@ media_type:
   - wav
   - m4a
   - aiff
+#  - mp4
+#  - avi
+#  - mkv
+#  - mov
+#  - ogv
+#  - wmv
+#  - bik
+#  - m4v
+#  - mpg
+#  - mpeg
+#  - flv
+#  - smk
+#  - ivf
 scan_roots:

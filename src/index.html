@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Starkeeper Media</title>
+<title>MusicTower</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -208,7 +208,7 @@ body { position: relative; z-index: 1; }
 </style>
 </head>
 <body>
-<h1>⭐ STARKEEPER MEDIA</h1>
+<h1>⭐ MusicTower</h1>
 <div id="summary" class="msg">loading…</div>
 
 <audio id="audio-player"></audio>
@@ -633,8 +633,9 @@ const up_gray=(tex,w,h,src)=>{
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,d)
 }
 
+const PROGS=FRAGS.map(build_prog)
 let mode=0,bass=0,mid=0,treble=0,beat=0,viz_time=0
-let prog=build_prog(FRAGS[0])
+let prog=PROGS[0]
 let next_prog=null,fade_start=0
 const FADE_SECS=1.5
 
@@ -667,7 +668,7 @@ window.addEventListener('message',e=>{
   }
   if(d.mode!==undefined&&d.mode!==mode){
     mode=d.mode
-    next_prog=build_prog(FRAGS[mode%FRAGS.length])
+    next_prog=PROGS[mode%FRAGS.length]
     fade_start=performance.now()/1000
   }
 })
@@ -753,7 +754,7 @@ const start_viz = () => {
   ensure_audio_ctx()
   if (audio_ctx.state === 'suspended') audio_ctx.resume()
   if (!viz_start) viz_start = performance.now()
-  VIZ_IFRAME.style.opacity = '1'
+  if (!viz_hidden) VIZ_IFRAME.style.opacity = '1'
   document.body.style.background = BODY_BG_VIZ
   get_palette().then(p => {
     VIZ_IFRAME.contentWindow?.postMessage({ viz: true, palette: p.data, pal_w: p.w, pal_h: p.h }, '*')
@@ -799,6 +800,19 @@ const stop_viz = () => {
   VIZ_IFRAME.style.opacity = '0'
   document.body.style.background = BODY_BG_DEFAULT
 }
+
+let viz_hidden = false
+const toggle_viz = () => {
+  viz_hidden = !viz_hidden
+  VIZ_IFRAME.style.opacity = viz_hidden ? '0' : (viz_raf ? '1' : '0')
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Backspace') return
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+  e.preventDefault()
+  toggle_viz()
+})
 
 // ── section collapse ──────────────────────────────────────────────────────────
 
@@ -906,19 +920,21 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
     const ratingCol = fromQueue ? '' : `<td>${rating_widget_html(t.join_key || '', 'track', rating)}</td>`
     const sizeCol   = fromQueue ? '' : `<td class="dim">${esc(kb)}</td>`
     const typeCol   = fromQueue ? '' : `<td><span class="badge">${esc(t.media_type)}</span></td>`
+    const classCol  = fromQueue ? '' : `<td><span class="badge">${esc(t.media_class || '')}</span>${t.lang ? `&thinsp;<span class="badge">${esc(t.lang)}</span>` : ''}</td>`
     const pathCol   = SHOW_PATHS ? `<td class="dim">${esc(t.full_path)}</td>` : ''
     return `<tr data-type="${esc(t.media_type)}" data-url="${esc(url)}"${hidden} class="${bannedCls}">
       <td class="play-col"><button class="play-btn" ${btnData} onclick="playBtnClick(this)">▶</button></td>
       <td>${esc(t.file_name)}</td>
       <td class="play-count">${plays}</td>
-      ${sizeCol}${ratingCol}${typeCol}${pathCol}
+      ${sizeCol}${ratingCol}${typeCol}${classCol}${pathCol}
     </tr>`
   }).join('')
   const ratingTh = fromQueue ? '' : '<th></th>'
   const sizeTh   = fromQueue ? '' : '<th>size</th>'
   const typeTh   = fromQueue ? '' : '<th>type</th>'
+  const classTh  = fromQueue ? '' : '<th>class</th>'
   const pathTh   = SHOW_PATHS ? '<th>path</th>' : ''
-  return `<table><tr><th></th><th>file</th><th>plays</th>${sizeTh}${ratingTh}${typeTh}${pathTh}</tr>${rows}</table>`
+  return `<table><tr><th></th><th>file</th><th>plays</th>${sizeTh}${ratingTh}${typeTh}${classTh}${pathTh}</tr>${rows}</table>`
 }
 
 // ── page build ────────────────────────────────────────────────────────────────
@@ -943,10 +959,14 @@ async function load() {
   const parts = [...orderedKeys, ...extraKeys].map(t =>
     `<strong>${byTypeMap[t].toLocaleString()}</strong>&thinsp;${t}`
   )
+  const classParts = (sum.by_class || []).map(r =>
+    `<strong>${r.count.toLocaleString()}</strong>&thinsp;${r.media_class}`
+  )
   document.getElementById('summary').innerHTML =
     `<strong>${sum.total.toLocaleString()}</strong> files &nbsp;·&nbsp; ` + parts.join(' &nbsp;·&nbsp; ')
     + ` &nbsp;|&nbsp; <strong>${(sum.soundtracks||0).toLocaleString()}</strong> sound tracks`
     + ` &nbsp;·&nbsp; <strong>${(sum.discovered||0).toLocaleString()}</strong> media collections`
+    + (classParts.length ? ` &nbsp;|&nbsp; ` + classParts.join(' &nbsp;·&nbsp; ') : '')
 
   document.getElementById('st-count').textContent = `${stList.length.toLocaleString()} titles`
   document.getElementById('dm-count').textContent = `${dmList.length.toLocaleString()} collections`

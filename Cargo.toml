@@ -7,6 +7,9 @@ edition = "2021"
 name = "music_server"
 path = "src/main.rs"
 
+[features]
+details-updater = []
+
 [dependencies]
 rusqlite = { version = "0.35", features = ["bundled"] }
 walkdir = "2"

@@ -1,4 +1,4 @@
-# Starkeeper Media — Steam Music Server
+# MusicTower — Steam Music Server
 
 A fast, self-hosted media server that scans your Steam libraries for soundtracks and game audio, then streams them through a built-in web player and REST API.
 

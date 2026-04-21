@@ -1,5 +1,7 @@
 const INDEX_HTML: &str = include_str!("index.html");
+const LOADING_HTML: &str = include_str!("loading.html");
 const COLORS_JS: &str = include_str!("colors.js");
+const LOGO_SVG: &str = include_str!("logo.svg");
 
 use axum::{
     body::Body,
@@ -17,7 +19,10 @@ use serde_json::{json, Value};
 use std::{
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
@@ -28,6 +33,7 @@ use tower_http::cors::{Any, CorsLayer};
 #[derive(Clone)]
 struct AppState {
     db: Arc<Mutex<Connection>>,
+    scanning: Arc<AtomicBool>,
     now_playing: Arc<Mutex<Option<Value>>>,
     media_type_order: Vec<String>,
 }
@@ -106,7 +112,8 @@ const ALBUM_FILE_TRACKS: &str = "
            sf.file_name, sf.size, sf.modified, sf.created,
            sf.join_key, sf.album_key,
            COALESCE(ts.rating,     0) AS rating,
-           COALESCE(ts.play_count, 0) AS play_count
+           COALESCE(ts.play_count, 0) AS play_count,
+           sf.media_class, sf.lang
     FROM steam_files sf
     LEFT JOIN pdb.track_stats ts ON ts.join_key = sf.join_key
     WHERE sf.title = :title
@@ -333,15 +340,29 @@ async fn api_summary(State(s): State<AppState>) -> Json<Value> {
     let discovered: i64 = db
         .query_row("SELECT COUNT(DISTINCT title) FROM steam_files WHERE scan_type = 'files'", (), |r| r.get(0))
         .unwrap_or(0);
-    Json(json!({ "total": total, "by_type": by_type, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
+    let by_class = run_query(
+        &db,
+        "SELECT media_class, COUNT(*) as count FROM steam_files GROUP BY media_class ORDER BY count DESC",
+        (),
+    );
+    Json(json!({ "total": total, "by_type": by_type, "by_class": by_class, "media_type_order": media_type_order, "soundtracks": soundtracks, "discovered": discovered }))
 }
 
-async fn serve_index() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], INDEX_HTML)
+async fn serve_index(State(s): State<AppState>) -> impl IntoResponse {
+    let html = if s.scanning.load(Ordering::Relaxed) { LOADING_HTML } else { INDEX_HTML };
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html)
+}
+
+async fn api_status(State(s): State<AppState>) -> Json<Value> {
+    Json(json!({ "scanning": s.scanning.load(Ordering::Relaxed) }))
 }
 
 async fn serve_colors_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/javascript")], COLORS_JS)
+}
+
+async fn serve_logo_svg() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO_SVG)
 }
 
 
@@ -679,6 +700,7 @@ async fn cdn_serve(State(s): State<AppState>, Path(p): Path<CdnParams>) -> Respo
 
 // ── background app-details updater ───────────────────────────────────────────
 
+#[cfg(feature = "details-updater")]
 fn mark_app_detail_error(conn: &Connection, appid: &str) -> Result<(), rusqlite::Error> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -692,6 +714,7 @@ fn mark_app_detail_error(conn: &Connection, appid: &str) -> Result<(), rusqlite:
     Ok(())
 }
 
+#[cfg(feature = "details-updater")]
 fn spawn_details_updater(steam_details_db: String) {
     std::thread::spawn(move || {
         let conn = match rusqlite::Connection::open(&steam_details_db) {
@@ -858,7 +881,12 @@ fn ensure_certs(cert_path: &str, key_path: &str) {
 
 // ── startup ───────────────────────────────────────────────────────────────────
 
-pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_details_db: &str, media_type_order: &[String]) {
+pub async fn start(
+    bind_addr: &str,
+    db: Arc<Mutex<Connection>>,
+    scanning: Arc<AtomicBool>,
+    media_type_order: Vec<String>,
+) {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .ok();
@@ -868,20 +896,11 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_detail
 
     ensure_certs(CERT, KEY);
 
-    let conn = Connection::open(db_path).unwrap_or_else(|e| {
-        eprintln!("ERROR: opening db for server: {e}");
-        std::process::exit(1);
-    });
-    conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")
-        .ok();
-    let player_db_escaped = player_db.replace('\'', "''");
-    conn.execute_batch(&format!("ATTACH DATABASE '{player_db_escaped}' AS pdb;"))
-        .unwrap_or_else(|e| eprintln!("WARNING: failed to attach player.db: {e}"));
-
     let state = AppState {
-        db: Arc::new(Mutex::new(conn)),
+        db,
+        scanning,
         now_playing: Arc::new(Mutex::new(None)),
-        media_type_order: media_type_order.to_vec(),
+        media_type_order,
     };
 
     let cors = CorsLayer::new()
@@ -891,7 +910,9 @@ pub async fn start(bind_addr: &str, db_path: &str, player_db: &str, steam_detail
 
     let app = Router::new()
         .route("/", get(serve_index))
+        .route("/api/status", get(api_status))
         .route("/colors.js", get(serve_colors_js))
+        .route("/logo.svg", get(serve_logo_svg))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))

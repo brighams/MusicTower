@@ -6,9 +6,22 @@ mod setup;
 mod steam;
 
 use std::env;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
 
 const DEFAULT_CONFIG: &str = "config/scanner_conf.yaml";
+
+fn open_browser(url: &str) {
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd").args(["/c", "start", "", url]).spawn();
+}
 
 #[tokio::main]
 async fn main() {
@@ -35,6 +48,8 @@ async fn main() {
             }
         }).unwrap_or_else(|| "127.0.0.1:8086".to_owned())
     };
+
+    let scanning = Arc::new(AtomicBool::new(true));
 
     if env::var("STEAM_ID").is_err() || env::var("STEAM_API_KEY").is_err() {
         println!("SETUP: STEAM_ID or STEAM_API_KEY not set — starting first-time setup");
@@ -93,6 +108,23 @@ async fn main() {
     }
 
     let extensions = cfg.extensions();
+
+    let server_handle = if !serve_bind.is_empty() {
+        let shared_db: std::sync::Arc<std::sync::Mutex<rusqlite::Connection>> = database::make_placeholder_db();
+        let db_for_server = shared_db.clone();
+        let scan_flag = scanning.clone();
+        let bind = serve_bind.clone();
+        let ext = extensions.clone();
+        let handle = tokio::spawn(async move {
+            server::start(&bind, db_for_server, scan_flag, ext).await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        open_browser(&format!("https://{serve_bind}"));
+        Some((handle, shared_db))
+    } else {
+        None
+    };
+
     println!(
         "SCANNER: scanning for {:?} in {} roots",
         extensions,
@@ -117,7 +149,12 @@ async fn main() {
         start.elapsed().as_secs_f64()
     );
 
-    if !serve_bind.is_empty() {
-        server::start(&serve_bind, &cfg.db_file, &player_db, &steam_details_db, &extensions).await;
+    if let Some((handle, shared_db)) = server_handle {
+        match database::open_server_db(&cfg.db_file, &player_db) {
+            Ok(conn) => { *shared_db.lock().unwrap() = conn; }
+            Err(e) => eprintln!("DB: failed to open server db: {e}"),
+        }
+        scanning.store(false, Ordering::Relaxed);
+        handle.await.ok();
     }
 }
