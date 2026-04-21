@@ -640,6 +640,54 @@ void main(){
     }
   }
   gl_FragColor=vec4(col,u_alpha);
+}\`,\`precision mediump float;
+uniform float u_time,u_bass,u_mid,u_treble,u_beat,u_alpha;uniform vec2 u_res;
+uniform sampler2D u_palette,u_wave,u_freq;
+\${HASH}
+float N(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*N(p);p=p*2.1+vec2(1.7,9.2);a*=.5;}return v;}
+vec3 spal(float t){
+  t=fract(t);
+  vec3 c=vec3(.07,.00,.00);
+  c=mix(c,vec3(.62,.02,.00),smoothstep(0.,.28,t));
+  c=mix(c,vec3(.95,.17,.00),smoothstep(.28,.55,t));
+  c=mix(c,vec3(1.,.52,.02),smoothstep(.55,.80,t));
+  c=mix(c,vec3(1.,.90,.20),smoothstep(.80,1.,t));
+  return c;
+}
+void main(){
+  vec2 uv=(gl_FragCoord.xy/u_res-.5)*vec2(u_res.x/u_res.y,1.);
+  float t=u_time*.18;
+  float blink=pow(max(0.,sin(u_time*.43+.5)*sin(u_time*.71+1.8)*sin(u_time*1.13)),4.);
+  float open=1.-blink;
+  float ev=.34,ew_h=(.095+u_bass*.02+u_beat*.012)*open+.003;
+  float yn=uv.y/ev;
+  float half_w=ew_h*sqrt(max(0.,1.-yn*yn));
+  float eye=smoothstep(half_w+.005,half_w-.005,abs(uv.x))*smoothstep(1.05,.95,abs(yn));
+  vec2 ec=vec2(uv.x/max(ew_h,.003),uv.y/ev);
+  float ir=length(ec);
+  vec2 gaze=vec2(sin(u_time*.07)*.06,cos(u_time*.11+1.)*.10);
+  vec2 fuv=(ec-gaze)*1.2+vec2(t*.2,t*.55);
+  float fv=fbm(fuv+u_bass*.65)*.6+fbm(fuv*1.4-vec2(t*.1,t*.3)+u_mid*.35)*.4;
+  float iglow=(1.-smoothstep(0.,.88,ir))*(.25+u_bass*.75+u_beat*.5)+exp(-abs(ir-.68)*14.)*.4;
+  vec3 iris=spal(fv*.8+.1)*iglow;
+  float ph=max(.015,(0.02+u_bass*.07)*ev);
+  float pd=length(vec2(uv.x/max(ew_h*.90,.003),uv.y/ph));
+  float pupil=smoothstep(1.1,.80,pd)*eye;
+  vec3 pc=spal(.03)*(.3+u_bass*.4);
+  vec3 ecol=mix(iris,pc,pupil);
+  float cor=exp(-max(0.,ir-.90)*4.)*(.15+u_bass*.85+u_beat*.70);
+  vec3 ccol=spal(fv*.5+.05)*cor;
+  float atm=fbm(uv*2.+vec2(t*.04,-t*.06));
+  vec3 bg=spal(atm*.3+.08)*atm*(.03+u_bass*.05);
+  float fw=.095*sqrt(max(0.,1.-yn*yn));
+  float ylid=smoothstep(1.04,.93,abs(yn));
+  float lid=(smoothstep(fw+.01,fw-.01,abs(uv.x))-eye)*ylid*blink;
+  vec3 lc=spal(.12+fbm(uv*5.+t*.12)*.08)*.18;
+  vec3 col=bg+ccol+ecol*eye+lc*lid;
+  col+=spal(.92)*u_beat*.5*smoothstep(1.4,.6,ir);
+  gl_FragColor=vec4(col,u_alpha);
 }\`]
 
 const compile=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
@@ -688,7 +736,7 @@ const pdur=(d)=>d[Math.floor(Math.random()*d.length)]
 const layers=[
   {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([6,8,12])},
   {progs:PROGS_A,cur:rnd(PROGS_A.length),next:-1,fs:0,ts:ns(),dur:pdur([2,4,8])},
-  {progs:PROGS_B,cur:rnd(PROGS_B.length),next:-1,fs:0,ts:ns(),dur:16},
+  {progs:PROGS_B,cur:rnd(PROGS_B.length),next:-1,fs:0,ts:ns(),dur:pdur([6,8,12])},
 ]
 
 const draw=(po,alpha)=>{

@@ -355,6 +355,14 @@ pub fn init_player_db(path: &str) -> Result<(), Box<dyn std::error::Error>> {
          CREATE TABLE IF NOT EXISTS album_stats (
              album_key TEXT PRIMARY KEY,
              rating    INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS logo_cache (
+             appid        TEXT PRIMARY KEY,
+             error        TEXT,
+             capsule_url  TEXT,
+             hero_url     TEXT,
+             logo_url     TEXT,
+             updated_date INTEGER
          );",
     )?;
     println!("DB: player.db initialized at {path}");
@@ -399,5 +407,18 @@ pub fn sync_owned_to_player_db(conn: &Connection, apps: &[OwnedApp]) -> Result<(
         stmt.execute(params![app.appid, app.name])?;
     }
     println!("DB: Synced {} owned apps to steam_details.db", apps.len());
+    Ok(())
+}
+
+pub fn insert_logo_cache_placeholders(conn: &mut Connection, appids: &[String]) -> Result<()> {
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO logo_cache (appid) VALUES (?1)")?;
+        for appid in appids {
+            stmt.execute([appid])?;
+        }
+    }
+    tx.commit()?;
+    println!("LOGOS: Inserted {} logo_cache placeholder rows", appids.len());
     Ok(())
 }

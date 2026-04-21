@@ -1,5 +1,7 @@
 mod config;
 mod database;
+#[cfg(feature = "logo-cache")]
+mod logos;
 mod scanner;
 mod server;
 mod setup;
@@ -90,6 +92,9 @@ async fn main() {
         None => eprintln!("STEAM: could not locate Steam installation, skipping library scan"),
     }
 
+    #[cfg(feature = "logo-cache")]
+    let mut logo_appids: Vec<String> = Vec::new();
+
     match steam::owned_apps() {
         Ok(owned) => {
             if let Err(e) = database::insert_owned_apps(&mut conn, &owned) {
@@ -103,6 +108,8 @@ async fn main() {
                 }
                 Err(e) => eprintln!("DB: failed to open steam_details.db: {e}"),
             }
+            #[cfg(feature = "logo-cache")]
+            { logo_appids = owned.iter().map(|a| a.appid.clone()).collect(); }
         }
         Err(e) => eprintln!("STEAM: skipping owned games ({e})"),
     }
@@ -115,8 +122,9 @@ async fn main() {
         let scan_flag = scanning.clone();
         let bind = serve_bind.clone();
         let ext = extensions.clone();
+        let sdb = steam_details_db.clone();
         let handle = tokio::spawn(async move {
-            server::start(&bind, db_for_server, scan_flag, ext).await;
+            server::start(&bind, db_for_server, scan_flag, ext, sdb).await;
         });
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         open_browser(&format!("https://{serve_bind}"));
@@ -142,6 +150,19 @@ async fn main() {
 
     if let Err(e) = database::init_player_db(&player_db) {
         eprintln!("DB: failed to init player.db: {e}");
+    }
+
+    #[cfg(feature = "logo-cache")]
+    {
+        match rusqlite::Connection::open(&player_db) {
+            Ok(mut pconn) => {
+                if let Err(e) = database::insert_logo_cache_placeholders(&mut pconn, &logo_appids) {
+                    eprintln!("LOGOS: failed to insert placeholders: {e}");
+                }
+            }
+            Err(e) => eprintln!("LOGOS: failed to open player.db: {e}"),
+        }
+        logos::spawn_logo_loader(player_db.clone(), cfg.logo_cache_path());
     }
 
     println!(

@@ -8,7 +8,9 @@ name = "music_server"
 path = "src/main.rs"
 
 [features]
+default = ["details-updater"]
 details-updater = []
+logo-cache = []
 
 [dependencies]
 rusqlite = { version = "0.35", features = ["bundled"] }
@@ -31,6 +33,7 @@ rcgen = "0.13"
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
 mime_guess = "2"
 steam-vent = "0.5.0"
+steam-vent-proto-steam = "0.5.2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

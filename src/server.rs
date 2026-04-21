@@ -886,6 +886,7 @@ pub async fn start(
     db: Arc<Mutex<Connection>>,
     scanning: Arc<AtomicBool>,
     media_type_order: Vec<String>,
+    steam_details_db: String,
 ) {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -948,10 +949,8 @@ pub async fn start(
         std::process::exit(1);
     });
 
-    // ======================
-    // disabled for now
-    // spawn_details_updater(steam_details_db.to_owned());
-    // ======================
+    #[cfg(feature = "details-updater")]
+    spawn_details_updater(steam_details_db.to_owned());
 
     println!("SERVER: https://{addr}");
     println!("  /api/tracks");

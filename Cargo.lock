@@ -1304,6 +1304,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "steam-vent",
+ "steam-vent-proto-steam",
  "tokio",
  "tokio-util",
  "tower-http",
