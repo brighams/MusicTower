@@ -223,26 +223,44 @@ window.addEventListener('message',e=>{
   if(d.shaders){compile_total+=d.shaders.length;for(const s of d.shaders)pending.push({src:s.src,num:Math.min(s.num||1000,MAX_VERTS),mode:MODE_MAP[s.mode]??0})}
 })
 
-const rnd=(n,x)=>{let r;do{r=Math.floor(Math.random()*n)}while(r===x);return r}
+const rnd=(n,x)=>{let r;do{r=Math.floor(Math.random()*n)}while(n>1&&r===x);return r}
 const ns=()=>performance.now()/1000
 const DURS=[12,18,24],FADE=4
 const rnd_dur=()=>DURS[Math.floor(Math.random()*DURS.length)]
 let cur=2,next=-1,ts=ns(),fade_start=0,dur=rnd_dur(),fade_dur=FADE
+
+const drop_prog=(i)=>{
+  progs.splice(i,1)
+  if(!progs.length)return
+  if(cur>=progs.length)cur=0
+  if(next===i)next=-1
+  else if(next>i)next--
+}
+
+const safe_draw=(i,fade)=>{
+  draw(progs[i],fade)
+  const err=gl.getError()
+  if(err){drop_prog(i);next=progs.length>1?rnd(progs.length,cur):-1;fade_start=ns();fade_dur=1;return false}
+  return true
+}
 
 const render=()=>{
   requestAnimationFrame(render)
   for(let _i=0;_i<3&&pending.length>0;_i++){const _d=pending.shift();compile_done++;const _pg=build_prog(_d);if(_pg)progs.push(_pg)}
   if(pending.length===0&&compile_total>0&&compile_done===compile_total)window.parent.postMessage({viz_progress:{compiled:compile_done,total:compile_total}},'*')
   else if(compile_done%100===0&&compile_done>0)window.parent.postMessage({viz_progress:{compiled:compile_done,total:compile_total}},'*')
+  if(!progs.length)return
   gl.clear(gl.COLOR_BUFFER_BIT)
   const t=ns()
   if(next===-1&&t-ts>=dur){next=rnd(progs.length,cur);fade_start=t}
   if(next!==-1){
     const ft=Math.min(1,(t-fade_start)/fade_dur)
-    draw(progs[cur],1-ft);draw(progs[next],ft)
+    if(!safe_draw(cur,1-ft))return
+    if(next===-1)return
+    if(!safe_draw(next,ft))return
     if(ft>=1){cur=next;next=-1;ts=t;dur=rnd_dur();fade_dur=FADE}
   }else{
-    draw(progs[cur],1)
+    safe_draw(cur,1)
   }
 }
 render()
