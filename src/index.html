@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <title>MusicTower</title>
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/mixer.css">
 <script type="module" src="/VSA_shadercore.js"></script>
+<script type="module" src="/mixer.js"></script>
 </head>
 <body>
 <audio id="audio-player"></audio>
@@ -60,6 +62,7 @@
       <tr><td class="kb-key">R</td><td class="kb-desc">Toggle random mode</td></tr>
       <tr><td class="kb-key">A</td><td class="kb-desc">Toggle album mode</td></tr>
       <tr><td class="kb-key">F</td><td class="kb-desc">Toggle fullscreen</td></tr>
+      <tr><td class="kb-key">M</td><td class="kb-desc">Open a mixer</td></tr>
       <tr><td class="kb-key">Tab</td><td class="kb-desc">Force visualizer change</td></tr>
       <tr><td class="kb-key">Bksp</td><td class="kb-desc">Hide / show visualizer</td></tr>
       <tr><td class="kb-key">?</td><td class="kb-desc">Open / close this panel</td></tr>
@@ -382,6 +385,7 @@ document.addEventListener('keydown', (e) => {
     case '?':        toggleInfoPopup();                                  break
     case 'Tab':      e.preventDefault(); window.force_viz_change?.();   break
     case 'Backspace': window.toggle_vsvis?.();                           break
+    case 'm':        window.open_mixer?.();                                break
     case 'Escape':   if (document.getElementById('info-popup').classList.contains('open')) toggleInfoPopup(); break
   }
 })

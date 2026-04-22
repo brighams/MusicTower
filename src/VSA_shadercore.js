@@ -327,6 +327,7 @@ window.stop_vsvis            = stop_vsvis
 window.on_track_change_vsvis = on_track_change_vsvis
 window.force_viz_change      = force_viz_change
 window.toggle_vsvis          = toggle_vsvis
+window.get_audio_ctx         = () => { ensure_audio_ctx(); return { ctx: audio_ctx, analyser } }
 
 let _sc = null
 const _BATCH = 100

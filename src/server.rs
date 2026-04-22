@@ -6,6 +6,9 @@ const STYLES_CSS: &str = include_str!("styles.css");
 const IMG_COALESCE_JS: &str = include_str!("ImgCoalesce.js");
 const VISUALIZER_JS: &str = include_str!("visualizer.js");
 const VERTEXSHADERVIS_JS: &str = include_str!("VSA_shadercore.js");
+const MIXER_JS: &str = include_str!("mixer.js");
+const MIXER_CSS: &str = include_str!("mixer.css");
+const MIXER_PNG: &[u8] = include_bytes!("../assets/mixer.png");
 
 use axum::{
     body::Body,
@@ -137,6 +140,7 @@ const RANDOM_ALBUMS: &str = "
     FROM steam_files sf
     LEFT JOIN pdb.album_stats ast ON ast.album_key = sf.album_key
     WHERE (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
+      AND (:class IS NULL OR LOWER(sf.media_class) = LOWER(:class))
       AND COALESCE(ast.rating, 0) >= 0";
 
 const ALBUM_TRACKS: &str = "
@@ -203,8 +207,8 @@ fn run_query_one(conn: &Connection, sql: &str, params: impl rusqlite::Params) ->
 
 // ── random track helpers ──────────────────────────────────────────────────────
 
-fn pick_random_track(conn: &Connection, media_type: Option<&str>) -> Option<Value> {
-    let albums = run_query(conn, RANDOM_ALBUMS, rusqlite::named_params! { ":type": media_type });
+fn pick_random_track(conn: &Connection, media_type: Option<&str>, media_class: Option<&str>) -> Option<Value> {
+    let albums = run_query(conn, RANDOM_ALBUMS, rusqlite::named_params! { ":type": media_type, ":class": media_class });
     if albums.is_empty() {
         return None;
     }
@@ -386,6 +390,18 @@ async fn serve_visualizer_js() -> impl IntoResponse {
 
 async fn serve_vertexshadervis_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/javascript")], VERTEXSHADERVIS_JS)
+}
+
+async fn serve_mixer_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], MIXER_JS)
+}
+
+async fn serve_mixer_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css")], MIXER_CSS)
+}
+
+async fn serve_mixer_png() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/png")], MIXER_PNG)
 }
 
 async fn api_shaders(State(s): State<AppState>) -> Response {
@@ -575,12 +591,14 @@ struct RandomQuery {
     vlc: Option<String>,
     #[serde(rename = "type")]
     media_type: Option<String>,
+    #[serde(rename = "class")]
+    media_class: Option<String>,
 }
 
 async fn api_random_track(State(s): State<AppState>, Query(q): Query<RandomQuery>) -> Response {
     let n = q.count.unwrap_or(1).max(1).min(100) as usize;
     let db = s.db.lock().unwrap();
-    let tracks: Vec<Value> = (0..n).filter_map(|_| pick_random_track(&db, q.media_type.as_deref())).collect();
+    let tracks: Vec<Value> = (0..n).filter_map(|_| pick_random_track(&db, q.media_type.as_deref(), q.media_class.as_deref())).collect();
     if q.vlc.is_some() {
         return (
             [(header::CONTENT_TYPE, "application/xspf+xml")],
@@ -978,6 +996,9 @@ pub async fn start(
         .route("/ImgCoalesce.js", get(serve_img_coalesce_js))
         .route("/visualizer.js", get(serve_visualizer_js))
         .route("/VSA_shadercore.js", get(serve_vertexshadervis_js))
+        .route("/mixer.js", get(serve_mixer_js))
+        .route("/mixer.css", get(serve_mixer_css))
+        .route("/assets/mixer.png", get(serve_mixer_png))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))
