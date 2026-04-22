@@ -4,6 +4,7 @@ const COLORS_JS: &str = include_str!("colors.js");
 const LOGO_SVG: &str = include_str!("logo.svg");
 const STYLES_CSS: &str = include_str!("styles.css");
 const IMG_COALESCE_JS: &str = include_str!("ImgCoalesce.js");
+const VISUALIZER_JS: &str = include_str!("visualizer.js");
 
 use axum::{
     body::Body,
@@ -374,6 +375,10 @@ async fn serve_logo_svg() -> impl IntoResponse {
 
 async fn serve_img_coalesce_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/javascript")], IMG_COALESCE_JS)
+}
+
+async fn serve_visualizer_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], VISUALIZER_JS)
 }
 
 fn ensure_styles_css() {
@@ -944,6 +949,7 @@ pub async fn start(
         .route("/logo.svg", get(serve_logo_svg))
         .route("/styles.css", get(serve_styles_css))
         .route("/ImgCoalesce.js", get(serve_img_coalesce_js))
+        .route("/visualizer.js", get(serve_visualizer_js))
         .route("/api/summary", get(api_summary))
         .route("/api/albums", get(api_albums))
         .route("/api/album/tracks", get(api_album_tracks))
