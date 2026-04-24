@@ -1,7 +1,7 @@
 .mixer-window {
   position: fixed;
-  width: 360px; height: 280px;
-  min-width: 220px; min-height: 180px;
+  width: 460px; height: 460px;
+  min-width: 280px; min-height: 260px;
   resize: both; overflow: hidden;
   z-index: 300;
   background: linear-gradient(160deg, #1a0035 0%, #2e0055 55%, #180030 100%);
@@ -22,6 +22,8 @@
 .mixer-title {
   font-size: 0.75em; color: #c060f0;
   letter-spacing: 2px; text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: calc(100% - 32px);
 }
 
 .mixer-close {
@@ -29,6 +31,7 @@
   font-size: 1em; cursor: pointer;
   line-height: 1; padding: 2px 4px;
   font-family: inherit; transition: color 0.12s;
+  flex-shrink: 0;
 }
 .mixer-close:hover { color: #c060f0; }
 
@@ -58,9 +61,11 @@
 
 /* ── main row: left (record+vol) | right (mix list) ─────────────────── */
 .mixer-main-row {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: row; gap: 10px; align-items: flex-start;
+  height: 148px;
+  flex-shrink: 0;
+  display: flex; flex-direction: row; gap: 10px; align-items: stretch;
   overflow: hidden;
+  margin-bottom: 10px;
 }
 
 .mixer-left {
@@ -72,9 +77,12 @@
 
 .mixer-record-wrap {
   width: 128px; height: 128px; flex-shrink: 0;
-  animation: mixer-spin 5s linear infinite;
   cursor: pointer;
   filter: drop-shadow(0 0 6px #ff0088) drop-shadow(0 0 18px #ff0088) drop-shadow(0 0 36px #c00060);
+}
+
+.mixer-record-wrap.spinning {
+  animation: mixer-spin 5s linear infinite;
 }
 
 @keyframes mixer-pulse {
@@ -92,7 +100,7 @@
   animation: mixer-pulse 0.5s ease-out forwards;
 }
 
-/* ── vertical volume slider ───────────────────────────────────────────── */
+/* ── vertical master volume slider ───────────────────────────────────── */
 .mixer-volume {
   -webkit-appearance: none;
   appearance: none;
@@ -134,7 +142,7 @@
 }
 
 /* ── mix list ─────────────────────────────────────────────────────────── */
-.mixer-mix-list {
+.mixer-mixin-list {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column; gap: 4px;
   overflow-y: auto; padding-right: 2px;
@@ -142,15 +150,174 @@
   align-content: flex-start;
 }
 
-.mixer-mix-item {
-  padding: 5px 10px; flex-shrink: 0;
+.mixer-mixin {
+  position: relative;
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; flex-shrink: 0;
   background: rgba(200,50,255,0.08); border: 1px solid #6a28a0;
-  border-radius: 4px; color: #c080e8; font-size: 0.72em;
-  cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  transition: background 0.1s, border-color 0.1s, color 0.1s;
+  border-radius: 4px;
+  transition: background 0.1s, border-color 0.1s;
+  overflow: hidden;
 }
 
-.mixer-mix-item:hover {
-  background: rgba(200,50,255,0.2); border-color: #e060f8; color: #f0a0ff;
+.mixer-mixin:hover {
+  background: rgba(200,50,255,0.16); border-color: #9040c0;
+}
+
+.mixin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+/* ── shared play button (mix items + search results) ─────────────────── */
+.mixin-play {
+  position: relative; z-index: 1;
+  background: none;
+  border: 1px solid #6a28a0;
+  color: #c080e8;
+  font-size: 0.65em;
+  width: 20px; height: 20px;
+  cursor: pointer; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: border-color 0.1s, color 0.1s;
+  padding: 0;
+}
+.mixin-play:hover { border-color: #e060f8; color: #f080ff; }
+
+.mixin-name {
+  position: relative; z-index: 1;
+  flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.72em; color: #c080e8;
+}
+
+/* ── per-item volume bar (thin horizontal) ───────────────────────────── */
+.mixin-vol {
+  position: relative; z-index: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 58px; height: 14px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.mixin-vol::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 2px;
+  background: #4a2060;
+  border: none;
+}
+
+.mixin-vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #c060f0;
+  margin-top: -3px;
+  border: none; cursor: pointer;
+}
+
+.mixin-vol::-moz-range-track {
+  height: 3px; border-radius: 2px;
+  background: #4a2060;
+  border: none;
+}
+
+.mixin-vol::-moz-range-thumb {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #c060f0;
+  border: none; cursor: pointer;
+}
+
+/* ── search section ──────────────────────────────────────────────────── */
+.mixer-search-section {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  border-top: 1px solid #3a1060;
+  padding-top: 8px;
+}
+
+.mixer-search-input {
+  width: 100%; flex-shrink: 0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #6a28a0;
+  border-radius: 3px;
+  color: #c080e8;
+  font-family: inherit; font-size: 0.75em;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.mixer-search-input:focus { border-color: #c060f0; }
+.mixer-search-input::placeholder { color: #5a2880; }
+
+.mixer-search-results {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: #7020a0 #0e0020; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.mixer-result-album {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px;
+  cursor: pointer; border-radius: 3px;
+  font-size: 0.72em; color: #a060d8;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+.mixer-result-album:hover { background: rgba(180,0,255,0.12); }
+
+.mixer-result-album-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1;
+}
+
+.mixer-result-expand {
+  flex-shrink: 0; margin-left: 6px;
+  color: #6a28a0; font-size: 0.9em;
+}
+
+.mixer-result-tracks {
+  display: flex; flex-direction: column; gap: 2px;
+  padding-left: 10px; padding-bottom: 4px;
+}
+
+.mixer-result-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 4px; border-radius: 3px;
+  transition: background 0.1s;
+}
+.mixer-result-item:hover { background: rgba(180,0,255,0.1); }
+
+.mixer-result-ctx {
+  flex-shrink: 0;
+  font-size: 0.65em; color: #5a2880;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 120px;
+}
+
+.mixer-no-results {
+  padding: 6px 8px;
+  font-size: 0.7em; color: #5a2880;
+  font-style: italic;
+}
+
+@keyframes mixer-loading-spin { to { transform: rotate(360deg); } }
+
+.mixer-loading {
+  width: 18px; height: 18px;
+  border: 2px solid #3a1060;
+  border-top-color: #c060f0;
+  border-radius: 50%;
+  animation: mixer-loading-spin 0.6s linear infinite;
+  margin: 14px auto;
+  flex-shrink: 0;
 }

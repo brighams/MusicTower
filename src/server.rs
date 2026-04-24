@@ -130,9 +130,11 @@ const ALBUM_FILE_TRACKS: &str = "
            sf.media_class, sf.lang
     FROM steam_files sf
     LEFT JOIN pdb.track_stats ts ON ts.join_key = sf.join_key
-    WHERE sf.title = :title
+    WHERE (:title IS NULL OR sf.title = :title)
       AND (:type IS NULL OR UPPER(sf.media_type) = UPPER(:type))
       AND (:scan_type IS NULL OR sf.scan_type = :scan_type)
+      AND (:class IS NULL OR LOWER(sf.media_class) = LOWER(:class))
+      AND (:q IS NULL OR LOWER(sf.full_path) LIKE '%' || LOWER(:q) || '%')
     ORDER BY sf.file_name";
 
 const RANDOM_ALBUMS: &str = "
@@ -459,18 +461,23 @@ struct AlbumTracksQuery {
     #[serde(rename = "type")]
     media_type: Option<String>,
     scan_type: Option<String>,
+    q: Option<String>,
+    #[serde(rename = "class")]
+    media_class: Option<String>,
 }
 
 async fn api_album_tracks(State(s): State<AppState>, Query(q): Query<AlbumTracksQuery>) -> Response {
-    let title = match q.title {
-        None => return (StatusCode::BAD_REQUEST, Json(json!({"error":"missing title"}))).into_response(),
-        Some(v) => v,
-    };
+    if q.title.is_none() && q.q.is_none() && q.media_class.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error":"missing title, q, or class"}))).into_response();
+    }
     let db = s.db.lock().unwrap();
     let rows = run_query(
         &db,
         ALBUM_FILE_TRACKS,
-        rusqlite::named_params! { ":title": title, ":type": q.media_type, ":scan_type": q.scan_type },
+        rusqlite::named_params! {
+            ":title": q.title, ":type": q.media_type, ":scan_type": q.scan_type,
+            ":class": q.media_class, ":q": q.q,
+        },
     );
     if q.vlc.is_some() {
         return (
@@ -573,6 +580,41 @@ async fn api_search_tracks(State(s): State<AppState>, Query(q): Query<SearchTrac
         rusqlite::named_params! { ":appid": q.appid, ":appname": q.appname, ":type": q.media_type },
     );
     Json(Value::Array(rows)).into_response()
+}
+
+#[derive(Deserialize)]
+struct ClassTracksQuery {
+    #[serde(rename = "class")]
+    media_class: String,
+    q: Option<String>,
+}
+
+async fn api_class_tracks(State(s): State<AppState>, Query(q): Query<ClassTracksQuery>) -> Json<Value> {
+    let db = s.db.lock().unwrap();
+    let rows = run_query(
+        &db,
+        "SELECT id AS file_id, file_name, full_path, title, media_class, media_type, lang, dir_path, join_key
+         FROM steam_files
+         WHERE LOWER(media_class) = LOWER(:class)
+           AND (:q IS NULL OR LOWER(full_path) LIKE '%' || LOWER(:q) || '%')
+         ORDER BY title, file_name",
+        rusqlite::named_params! { ":class": q.media_class, ":q": q.q },
+    );
+    Json(Value::Array(rows))
+}
+
+async fn api_class_titles(State(s): State<AppState>, Query(q): Query<ClassTracksQuery>) -> Json<Value> {
+    let db = s.db.lock().unwrap();
+    let rows = run_query(
+        &db,
+        "SELECT DISTINCT title
+         FROM steam_files
+         WHERE LOWER(media_class) = LOWER(:class)
+           AND (:q IS NULL OR LOWER(file_name) LIKE '%' || LOWER(:q) || '%')
+         ORDER BY title",
+        rusqlite::named_params! { ":class": q.media_class, ":q": q.q },
+    );
+    Json(Value::Array(rows))
 }
 
 async fn api_now_playing(State(s): State<AppState>) -> Response {
@@ -1009,6 +1051,8 @@ pub async fn start(
         .route("/api/game/tracks", get(api_game_tracks))
         .route("/api/search/games", get(api_search_games))
         .route("/api/search/tracks", get(api_search_tracks))
+        .route("/api/class/tracks", get(api_class_tracks))
+        .route("/api/class/titles", get(api_class_titles))
         .route("/api/nowplaying", get(api_now_playing))
         .route("/api/random/track", get(api_random_track))
         .route("/api/random/game/music", get(api_random_track))

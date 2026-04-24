@@ -195,6 +195,9 @@ tr.playing td { background: rgba(120,0,180,0.2); color: #e8d0ff; }
 
 /* ── play count ──────────────────────────────────────────────────── */
 .play-count { color: #4a2870; font-size: 0.82em; }
+
+/* ── track path (now-playing queue) ─────────────────────────────── */
+.track-path { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75em; }
 .album-plays { color: #4a2870; font-size: 0.78em; flex-shrink: 0; }
 
 /* ── banned tracks ───────────────────────────────────────────────── */

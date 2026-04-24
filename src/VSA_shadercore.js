@@ -340,6 +340,7 @@ const force_viz_change      = () => _broadcast({ viz: true, reset: true })
 const toggle_vsvis = () => {
   _hidden = !_hidden
   VIS_CONTAINER.style.opacity = _hidden ? '0' : (viz_raf ? '1' : '0')
+  document.getElementById('np-screensaver')?.classList.toggle('active', !_hidden)
 }
 
 window.start_vsvis           = start_vsvis

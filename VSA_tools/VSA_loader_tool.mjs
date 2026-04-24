@@ -81,8 +81,17 @@ const insert = db.prepare(`
   )
 `)
 
+const MIN_CODE_LINES = 48
+
 const process_art_json = (filepath) => {
   const data = JSON.parse(readFileSync(filepath, 'utf8'))
+
+  const code = data.settings?.shader ?? ''
+  const line_count = code.split('\n').length
+  if (line_count < MIN_CODE_LINES) {
+    console.log(`Skipped (${line_count} lines): ${filepath}`)
+    return
+  }
 
   insert.run({
     _id: data._id,
@@ -125,7 +134,6 @@ const scan_directory = (dir) => {
       scan_directory(full_path)
     } else if (entry === 'art.json') {
       process_art_json(full_path)
-      console.log(`Processed: ${full_path}`)
     }
   }
 }

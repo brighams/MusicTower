@@ -297,7 +297,8 @@ pub fn insert_steam_files(conn: &mut Connection, files: &[(PathBuf, String)]) ->
 fn classify_media(path_str: &str) -> (String, Option<String>) {
     let lower = path_str.to_lowercase();
 
-    if lower.contains("audiobook") || lower.contains("audio book") {
+    if lower.contains("chapter") || lower.contains("audiobook") || lower.contains("audio book")
+        || lower.contains("audiodrama") || lower.contains("audio drama") {
         return ("audiobook".to_owned(), None);
     }
 
@@ -316,7 +317,7 @@ fn classify_media(path_str: &str) -> (String, Option<String>) {
     ];
 
     for code in LANG_CODES {
-        if lower.contains(&format!("/{code}/")) || lower.contains(&format!("_{code}/")) {
+        if lower.contains(&format!("/{code}/")) || lower.contains(&format!("_{code}.")) {
             return ("voice".to_owned(), Some(code.to_string()));
         }
     }

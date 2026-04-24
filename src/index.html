@@ -21,6 +21,7 @@
     <button class="np-btn" id="np-play"   onclick="togglePlayPause()" title="Play / Pause">▶</button>
     <button class="np-btn" id="np-skip"   onclick="skipTrack()"       title="Skip">⏭</button>
     <button class="np-btn" id="np-random" onclick="toggleRandom()"    title="Random mode">🎲</button>
+    <button class="np-btn active" id="np-screensaver" onclick="toggleScreensaver()" title="Toggle screensaver">◉</button>
     <button class="np-btn" id="np-album-mode" onclick="toggleAlbumMode()" title="Album mode">💿</button>
     <div id="np-track">
       <span id="np-label">Now Playing</span>
@@ -299,6 +300,8 @@ const toggleRandom = () => {
   document.getElementById('np-random').classList.toggle('active', randomMode)
 }
 
+const toggleScreensaver = () => window.toggle_vsvis?.()
+
 const toggleAlbumMode = () => {
   albumMode = !albumMode
   document.getElementById('np-album-mode').classList.toggle('active', albumMode)
@@ -506,8 +509,10 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
     const ratingCol = fromQueue ? '' : `<td>${rating_widget_html(t.join_key || '', 'track', rating)}</td>`
     const sizeCol   = fromQueue ? '' : `<td class="dim">${esc(kb)}</td>`
     const typeCol   = fromQueue ? '' : `<td><span class="badge">${esc(t.media_type)}</span></td>`
-    const classCol  = fromQueue ? '' : `<td><span class="badge">${esc(t.media_class || '')}</span>${t.lang ? `&thinsp;<span class="badge">${esc(t.lang)}</span>` : ''}</td>`
-    const pathCol   = SHOW_PATHS ? `<td class="dim">${esc(t.full_path)}</td>` : ''
+    const classCol  = `<td><span class="badge">${esc(t.media_class || '')}</span>${!fromQueue && t.lang ? `&thinsp;<span class="badge">${esc(t.lang)}</span>` : ''}</td>`
+    const _fp = t.full_path || ''
+    const _fp_idx = _fp.indexOf('/steamapps/')
+    const pathCol   = (fromQueue || SHOW_PATHS) ? `<td class="dim track-path">${esc(_fp_idx >= 0 ? _fp.slice(_fp_idx + 1) : _fp)}</td>` : ''
     return `<tr data-type="${esc(t.media_type)}" data-url="${esc(url)}"${hidden} class="${bannedCls}">
       <td class="play-col"><button class="play-btn" ${btnData} onclick="playBtnClick(this)">▶</button></td>
       <td>${esc(t.file_name)}</td>
@@ -518,9 +523,8 @@ const tracksTable = (tracks, urlFn, albumId, fromQueue) => {
   const ratingTh = fromQueue ? '' : '<th></th>'
   const sizeTh   = fromQueue ? '' : '<th>size</th>'
   const typeTh   = fromQueue ? '' : '<th>type</th>'
-  const classTh  = fromQueue ? '' : '<th>class</th>'
-  const pathTh   = SHOW_PATHS ? '<th>path</th>' : ''
-  return `<table><tr><th></th><th>file</th><th>plays</th>${sizeTh}${ratingTh}${typeTh}${classTh}${pathTh}</tr>${rows}</table>`
+  const pathTh   = (fromQueue || SHOW_PATHS) ? '<th>path</th>' : ''
+  return `<table><tr><th></th><th>file</th><th>plays</th>${sizeTh}${ratingTh}${typeTh}<th>class</th>${pathTh}</tr>${rows}</table>`
 }
 
 // ── page build ────────────────────────────────────────────────────────────────

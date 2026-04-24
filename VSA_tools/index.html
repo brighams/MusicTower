@@ -69,6 +69,27 @@
       border: none;
     }
 
+    #divider {
+      height: 8px;
+      cursor: row-resize;
+      background: #111;
+      border-top: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    #divider::after {
+      content: '';
+      width: 36px;
+      height: 2px;
+      background: #333;
+      border-radius: 1px;
+    }
+    #divider:hover { background: #1e1e1e; }
+    #divider:hover::after { background: #666; }
+
     #grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -202,6 +223,7 @@
       <button id="viewer-close">✕</button>
     </div>
     <iframe id="shader-frame" allowfullscreen></iframe>
+    <div id="divider"></div>
   </div>
   <div id="grid"></div>
 
@@ -214,6 +236,12 @@
     const shader_frame = document.getElementById('shader-frame')
     const viewer_link = document.getElementById('viewer-link')
     let active_card = null
+
+    const MIN_FRAME_H = () => window.innerHeight * 0.33 - 28
+
+    const set_frame_h = (px) => {
+      shader_frame.style.height = `${Math.max(MIN_FRAME_H(), px)}px`
+    }
 
     const open_shader = (card, art_url) => {
       if (active_card) active_card.classList.remove('active')
@@ -230,6 +258,22 @@
       shader_frame.src = ''
       if (active_card) active_card.classList.remove('active')
       active_card = null
+    })
+
+    const divider = document.getElementById('divider')
+    divider.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      const start_y = e.clientY
+      const start_h = shader_frame.getBoundingClientRect().height
+      shader_frame.style.pointerEvents = 'none'
+      const on_move = (ev) => set_frame_h(start_h + (ev.clientY - start_y))
+      const on_up = () => {
+        shader_frame.style.pointerEvents = ''
+        document.removeEventListener('mousemove', on_move)
+        document.removeEventListener('mouseup', on_up)
+      }
+      document.addEventListener('mousemove', on_move)
+      document.addEventListener('mouseup', on_up)
     })
 
     const set_rating = async (s) => {
