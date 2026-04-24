@@ -219,10 +219,26 @@ body { position: relative; z-index: 1; }
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   z-index: 0; pointer-events: none;
   opacity: 0; transition: opacity 1.5s ease;
+  background: #0e0820;
 }
 .vis-layer {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   border: none; mix-blend-mode: screen;
+}
+
+/* ── vis count + shader author ───────────────────────────────────────── */
+#vis-count-display {
+  position: fixed; bottom: 20px; left: 20px;
+  z-index: 5; pointer-events: none;
+  font-size: 16pt; color: #ff0088; font-family: monospace;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255,0,136,0.5);
+}
+#shader-author {
+  position: fixed; bottom: 48px; left: 20px;
+  z-index: 5; pointer-events: none;
+  font-size: 0.72em; color: rgba(192,96,240,0.75);
+  font-family: monospace; letter-spacing: 1px;
 }
 
 /* ── corner art ──────────────────────────────────────────────────────── */

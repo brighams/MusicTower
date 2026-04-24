@@ -176,7 +176,7 @@ const build_prog=def=>{
   gl.linkProgram(p)
   if(!gl.getProgramParameter(p,gl.LINK_STATUS)){gl.deleteProgram(p);return null}
   const U=n=>gl.getUniformLocation(p,n)
-  return{p,vid:gl.getAttribLocation(p,'vertexId'),num:def.num,mode:def.mode,bg:def.bg??null,
+  return{p,vid:gl.getAttribLocation(p,'vertexId'),num:def.num,mode:def.mode,bg:def.bg??null,author:def.author??null,
     Ut:U('time'),Uvc:U('vertexCount'),Ur:U('resolution'),Ubg:U('background'),
     Um:U('mouse'),Us:U('sound'),Ufs:U('floatSound'),Uvol:U('volume'),Utch:U('touch'),
     Usr:U('soundRes'),Ups:U('_dontUseDirectly_pointSize'),Ufa:U('u_fade')}
@@ -222,7 +222,7 @@ window.addEventListener('message',e=>{
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,SOUND_W,SOUND_H,0,gl.RGBA,gl.UNSIGNED_BYTE,sound_data)
   }
   if(d.reset){next=rnd(progs.length,cur);fade_start=ns();ts=ns();dur=rnd_dur();fade_dur=1}
-  if(d.shaders){compile_total+=d.shaders.length;for(const s of d.shaders)pending.push({src:s.src,num:Math.min(s.num||1000,MAX_VERTS),mode:MODE_MAP[s.mode]??0,bg:s.bg??null})}
+  if(d.shaders){compile_total+=d.shaders.length;for(const s of d.shaders)pending.push({src:s.src,num:Math.min(s.num||1000,MAX_VERTS),mode:MODE_MAP[s.mode]??0,bg:s.bg??null,author:s.author||null})}
 })
 
 const rnd=(n,x)=>{let r;do{r=Math.floor(Math.random()*n)}while(n>1&&r===x);return r}
@@ -260,7 +260,7 @@ const render=()=>{
     if(!safe_draw(cur,1-ft))return
     if(next===-1)return
     if(!safe_draw(next,ft))return
-    if(ft>=1){cur=next;next=-1;ts=t;dur=rnd_dur();fade_dur=FADE}
+    if(ft>=1){cur=next;next=-1;ts=t;dur=rnd_dur();fade_dur=FADE;window.parent.postMessage({viz_shader:{author:progs[cur]?.author??null}},'*')}
   }else{
     safe_draw(cur,1)
   }
@@ -332,6 +332,8 @@ const stop_vsvis = () => {
   if (viz_raf) { cancelAnimationFrame(viz_raf); viz_raf = null }
   beat = 0; prev_bass = 0
   VIS_CONTAINER.style.opacity = '0'
+  const sa = document.getElementById('shader-author')
+  if (sa) sa.textContent = ''
 }
 
 const on_track_change_vsvis = () => _broadcast({ viz: true, reset: true })
@@ -368,7 +370,6 @@ const _send_to_frame = (frame) => {
 
 const set_vis_count = (n) => {
   n = Math.max(1, Math.min(6, n))
-  localStorage.setItem('vis_count', n)
   while (VIZ_FRAMES.length < n) {
     const f = document.createElement('iframe')
     f.className = 'vis-layer'
@@ -381,6 +382,8 @@ const set_vis_count = (n) => {
     _ready_frames.delete(f)
     VIS_CONTAINER.removeChild(f)
   }
+  const vcd = document.getElementById('vis-count-display')
+  if (vcd) vcd.textContent = String(n)
 }
 window.set_vis_count = set_vis_count
 window.get_vis_count = () => VIZ_FRAMES.length
@@ -408,7 +411,11 @@ window.addEventListener('message', e => {
     if (total > 0 && compiled >= total) el.style.display = 'none'
     else if (total > 0) { el.style.display = ''; el.textContent = `⚡ ${compiled}/${total}` }
   }
+  if (e.data?.viz_shader && frame === VIZ_FRAMES[0]) {
+    const sa = document.getElementById('shader-author')
+    if (sa) sa.textContent = e.data.viz_shader.author ? `by ${e.data.viz_shader.author}` : ''
+  }
 })
 
-set_vis_count(parseInt(localStorage.getItem('vis_count') || '1'))
+set_vis_count(1)
 _load_shaders()

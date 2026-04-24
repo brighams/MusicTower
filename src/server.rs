@@ -607,11 +607,12 @@ async fn api_class_titles(State(s): State<AppState>, Query(q): Query<ClassTracks
     let db = s.db.lock().unwrap();
     let rows = run_query(
         &db,
-        "SELECT DISTINCT title
-         FROM steam_files
-         WHERE LOWER(media_class) = LOWER(:class)
-           AND (:q IS NULL OR LOWER(file_name) LIKE '%' || LOWER(:q) || '%')
-         ORDER BY title",
+        "SELECT DISTINCT sa.name AS title, sa.installdir AS install_key
+         FROM steam_apps sa
+         JOIN steam_files sf ON sa.installdir = sf.title
+         WHERE LOWER(sf.media_class) = LOWER(:class)
+           AND (:q IS NULL OR LOWER(sf.file_name) LIKE '%' || LOWER(:q) || '%')
+         ORDER BY sa.name",
         rusqlite::named_params! { ":class": q.media_class, ":q": q.q },
     );
     Json(Value::Array(rows))

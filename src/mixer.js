@@ -1,11 +1,15 @@
-const MEDIA_CLASSES = ['music', 'effect', 'voice', 'audiobook']
+const MEDIA_CLASSES    = ['music', 'effect', 'voice', 'audiobook']
+const STORAGE_PREFIX   = 'mixer.'
 let _count = 0
 
 const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
-const make_mixer = () => {
-  const n = ++_count
+const make_mixer = (config = null) => {
+  const n       = ++_count
   const cascade = (n - 1) % 8
+
+  let _name  = config?.name ?? 'Untitled'
+  let _saved = !!config
 
   const el = document.createElement('div')
   el.className = 'mixer-window'
@@ -14,8 +18,13 @@ const make_mixer = () => {
 
   el.innerHTML = `
     <div class="mixer-header">
-      <span class="mixer-title">Mixer</span>
-      <button class="mixer-close" title="Close">✕</button>
+      <span class="mixer-title" title="Double-click to rename">M${n}: ${esc(_name)}</span>
+      <div class="mixer-header-actions">
+        <button class="mixer-minimize" title="Minimize">–</button>
+        <button class="mixer-trash" title="Delete saved mixer" style="display:none">🗑</button>
+        <button class="mixer-save"  title="Save mixer">💾</button>
+        <button class="mixer-close" title="Close">✕</button>
+      </div>
     </div>
     <div class="mixer-body">
       <div class="mixer-class-row">
@@ -40,18 +49,101 @@ const make_mixer = () => {
     </div>
   `
 
-  const header     = el.querySelector('.mixer-header')
-  const wrap       = el.querySelector('.mixer-record-wrap')
-  const record     = el.querySelector('.mixer-record')
-  const vol_inp    = el.querySelector('.mixer-volume')
-  const mixin_list = el.querySelector('.mixer-mixin-list')
-  const title_el   = el.querySelector('.mixer-title')
-  const search_inp = el.querySelector('.mixer-search-input')
-  const search_res = el.querySelector('.mixer-search-results')
+  const header      = el.querySelector('.mixer-header')
+  const wrap        = el.querySelector('.mixer-record-wrap')
+  const record      = el.querySelector('.mixer-record')
+  const vol_inp     = el.querySelector('.mixer-volume')
+  const mixin_list  = el.querySelector('.mixer-mixin-list')
+  const title_el    = el.querySelector('.mixer-title')
+  const trash_btn   = el.querySelector('.mixer-trash')
+  const save_btn    = el.querySelector('.mixer-save')
+  const minimize_btn = el.querySelector('.mixer-minimize')
+  const search_inp  = el.querySelector('.mixer-search-input')
+  const search_res  = el.querySelector('.mixer-search-results')
+
+  if (_saved) trash_btn.style.display = ''
+
+  // ── dirty / save visibility ───────────────────────────────────────────────────
+
+  let _dirty = !config
+
+  const set_dirty = (d) => {
+    _dirty = d
+    save_btn.style.display = d ? '' : 'none'
+  }
+  set_dirty(_dirty)
+
+  // ── title editing ─────────────────────────────────────────────────────────────
+
+  title_el.addEventListener('dblclick', () => {
+    const inp = document.createElement('input')
+    inp.className = 'mixer-title-input'
+    inp.value = _name
+    title_el.replaceWith(inp)
+    inp.select()
+
+    const commit = () => {
+      const val = inp.value.trim()
+      if (val && val !== _name) {
+        _name = val
+        _saved = false
+        trash_btn.style.display = 'none'
+        set_dirty(true)
+      }
+      title_el.textContent = `M${n}: ${_name}`
+      inp.replaceWith(title_el)
+    }
+
+    inp.addEventListener('blur', commit)
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  inp.blur()
+      if (e.key === 'Escape') inp.replaceWith(title_el)
+    })
+  })
+
+  // ── save / delete ─────────────────────────────────────────────────────────────
+
+  const get_mixin_state = () =>
+    [...mixin_list.querySelectorAll('.mixer-mixin')].map(item => ({
+      file_id: parseInt(item.dataset.fileId),
+      name:    item.querySelector('.mixin-name').title,
+      vol:     parseFloat(item.querySelector('.mixin-vol').value),
+    }))
+
+  save_btn.addEventListener('click', () => {
+    const state = { name: _name, master_vol: parseFloat(vol_inp.value), mixins: get_mixin_state() }
+    localStorage.setItem(`${STORAGE_PREFIX}${_name}`, JSON.stringify(state))
+    _saved = true
+    trash_btn.style.display = ''
+    set_dirty(false)
+  })
+
+  let _trash_confirm = false
+  trash_btn.addEventListener('click', () => {
+    if (!_trash_confirm) {
+      _trash_confirm = true
+      trash_btn.textContent = '✓'
+      trash_btn.title = 'Confirm delete'
+      setTimeout(() => {
+        if (_trash_confirm) {
+          _trash_confirm = false
+          trash_btn.textContent = '🗑'
+          trash_btn.title = 'Delete saved mixer'
+        }
+      }, 2500)
+    } else {
+      localStorage.removeItem(`${STORAGE_PREFIX}${_name}`)
+      _saved = false
+      _trash_confirm = false
+      trash_btn.textContent = '🗑'
+      trash_btn.title = 'Delete saved mixer'
+      trash_btn.style.display = 'none'
+    }
+  })
 
   // ── audio setup ──────────────────────────────────────────────────────────────
 
-  let _setup = null
+  let _setup   = null
   let _playing = 0
   const update_spin = () => wrap.classList.toggle('spinning', _playing > 0)
 
@@ -64,11 +156,14 @@ const make_mixer = () => {
     gain.gain.value = parseFloat(vol_inp.value)
     gain.connect(analyser)
     _setup = { ctx, gain }
+    const new_count = Math.min(6, (window.get_vis_count?.() ?? 1) + 1)
+    window.set_vis_count?.(new_count)
     return _setup
   }
 
   vol_inp.addEventListener('input', () => {
     if (_setup) _setup.gain.gain.value = parseFloat(vol_inp.value)
+    set_dirty(true)
   })
 
   // ── class toggle ─────────────────────────────────────────────────────────────
@@ -81,7 +176,6 @@ const make_mixer = () => {
   }
 
   const active_class = () => el.querySelector('.mixer-class-btn.active')?.dataset.class ?? 'music'
-  const class_to_scan = (cls) => cls === 'music' ? 'music' : 'files'
 
   // ── inject a track ───────────────────────────────────────────────────────────
 
@@ -93,24 +187,16 @@ const make_mixer = () => {
     const audio = new Audio()
     audio.crossOrigin = 'anonymous'
     try {
-      const source     = ctx.createMediaElementSource(audio)
+      const source        = ctx.createMediaElementSource(audio)
       const item_analyser = ctx.createAnalyser()
       item_analyser.fftSize = 128
       item_analyser.smoothingTimeConstant = 0
-      const item_gain  = ctx.createGain()
+      const item_gain = ctx.createGain()
       item_gain.gain.value = 1.0
       source.connect(item_analyser)
       item_analyser.connect(item_gain)
       item_gain.connect(gain)
       audio.src = `/media/${file_id}`
-      await audio.play()
-
-      const new_count = Math.min(6, (window.get_vis_count?.() ?? 1) + 1)
-      window.set_vis_count?.(new_count)
-      const inp = document.getElementById('vis-count-input')
-      const val = document.getElementById('vis-count-val')
-      if (inp) { inp.value = new_count; if (val) val.textContent = new_count }
-
       return { audio, item_gain, item_analyser }
     } catch(e) {
       console.error('[mixer] inject failed:', e)
@@ -120,23 +206,25 @@ const make_mixer = () => {
 
   // ── add item to the mix list ─────────────────────────────────────────────────
 
-  const add_to_list = async (file_id, name) => {
+  const add_to_list = async (file_id, name, initial_vol = 1) => {
     const result = await inject(file_id)
     if (!result) return
     const { audio, item_gain, item_analyser } = result
 
-    _playing++
-    update_spin()
+    item_gain.gain.value = initial_vol
 
     const item = document.createElement('div')
     item.className = 'mixer-mixin'
+    item.dataset.fileId = file_id
     item.innerHTML = `
       <canvas class="mixin-canvas"></canvas>
-      <button class="mixin-play" title="Play / Pause">⏸</button>
-      <span class="mixin-name" title="${esc(name)}">${esc(name)}</span>
-      <input type="range" class="mixin-vol" min="0" max="1" step="0.01" value="1">
+      <button class="mixin-play"   title="Play / Pause">▶</button>
+      <span   class="mixin-name"   title="${esc(name)}">${esc(name)}</span>
+      <input  type="range" class="mixin-vol" min="0" max="1" step="0.01" value="${initial_vol}">
+      <button class="mixin-remove" title="Remove">✕</button>
     `
 
+    const remove_btn = item.querySelector('.mixin-remove')
     const play_btn   = item.querySelector('.mixin-play')
     const vol_slider = item.querySelector('.mixin-vol')
     const canvas     = item.querySelector('.mixin-canvas')
@@ -148,33 +236,46 @@ const make_mixer = () => {
       raf_id = requestAnimationFrame(draw_wave)
       item_analyser.getByteTimeDomainData(wave_data)
       ctx2d.clearRect(0, 0, canvas.width, canvas.height)
-      ctx2d.strokeStyle = '#00e8ff'
+      ctx2d.strokeStyle = '#ff0088'
       ctx2d.lineWidth = 1.5
       ctx2d.beginPath()
       const step = canvas.width / wave_data.length
       for (let i = 0; i < wave_data.length; i++) {
         const y = (wave_data[i] / 255) * canvas.height
         if (i === 0) ctx2d.moveTo(0, y)
-        else ctx2d.lineTo(i * step, y)
+        else         ctx2d.lineTo(i * step, y)
       }
       ctx2d.stroke()
     }
 
     const start_wave = () => { if (!raf_id) draw_wave() }
-    const stop_wave  = () => { if (raf_id) { cancelAnimationFrame(raf_id); raf_id = null } }
+    const stop_wave  = () => {
+      if (raf_id) { cancelAnimationFrame(raf_id); raf_id = null }
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height)
+    }
 
-    play_btn.addEventListener('click', (e) => {
+    remove_btn.addEventListener('click', e => {
+      e.stopPropagation()
+      audio.pause()
+      stop_wave()
+      item_gain.disconnect()
+      item.remove()
+      set_dirty(true)
+    })
+
+    play_btn.addEventListener('click', e => {
       e.stopPropagation()
       if (audio.paused) audio.play()
       else              audio.pause()
     })
 
-    audio.addEventListener('play',  () => { play_btn.textContent = '⏸'; start_wave(); _playing++; update_spin() })
-    audio.addEventListener('pause', () => { play_btn.textContent = '▶'; stop_wave(); _playing = Math.max(0, _playing - 1); update_spin() })
-    audio.addEventListener('ended', () => { _playing = Math.max(0, _playing - 1); update_spin() })
+    audio.addEventListener('play',  () => { play_btn.textContent = '⏸'; start_wave(); _playing++; update_spin(); window.start_vsvis?.() })
+    audio.addEventListener('pause', () => { play_btn.textContent = '▶';  stop_wave();  _playing = Math.max(0, _playing - 1); update_spin() })
+    audio.addEventListener('ended', () => {                                             _playing = Math.max(0, _playing - 1); update_spin() })
 
     vol_slider.addEventListener('input', () => {
       item_gain.gain.value = parseFloat(vol_slider.value)
+      set_dirty(true)
     })
 
     mixin_list.prepend(item)
@@ -208,9 +309,10 @@ const make_mixer = () => {
     if (!track?.file_id) return
     const name = (track.file_name || track.title || String(track.file_id)).replace(/\.[^.]+$/, '')
     add_to_list(track.file_id, name)
+    set_dirty(true)
   }
 
-  // ── click: pulse + play ──────────────────────────────────────────────────────
+  // ── click: pulse + random ────────────────────────────────────────────────────
 
   wrap.addEventListener('click', e => {
     e.stopPropagation()
@@ -225,8 +327,46 @@ const make_mixer = () => {
   // ── close ────────────────────────────────────────────────────────────────────
 
   el.querySelector('.mixer-close').addEventListener('click', () => {
-    if (_setup) _setup.gain.disconnect()
+    if (_setup) {
+      _setup.gain.disconnect()
+      window.set_vis_count?.(Math.max(1, (window.get_vis_count?.() ?? 1) - 1))
+    }
     el.remove()
+  })
+
+  // ── minimize / restore ────────────────────────────────────────────────────────
+
+  const TILE_W = 200
+  const TILE_H = 36
+  let _minimized = false
+
+  const restore_mixer = () => {
+    _minimized = false
+    el.classList.remove('minimized')
+    el.style.width  = ''
+    el.style.height = ''
+    el.style.left   = el.dataset.restoreLeft || el.style.left
+    el.style.top    = el.dataset.restoreTop  || el.style.top
+    el.style.resize = ''
+  }
+
+  minimize_btn.addEventListener('click', () => {
+    if (_minimized) { restore_mixer(); return }
+    _minimized = true
+    el.dataset.restoreLeft = el.style.left
+    el.dataset.restoreTop  = el.style.top
+    const slot = document.querySelectorAll('.mixer-window.minimized').length
+    el.classList.add('minimized')
+    el.style.width  = `${TILE_W}px`
+    el.style.height = `${TILE_H}px`
+    el.style.left   = `${window.innerWidth - TILE_W - slot * (TILE_W + 4) - 4}px`
+    el.style.top    = `${window.innerHeight - TILE_H - 4}px`
+    el.style.resize = 'none'
+  })
+
+  header.addEventListener('click', e => {
+    if (!_minimized || e.target.closest('button')) return
+    restore_mixer()
   })
 
   // ── drag from header ─────────────────────────────────────────────────────────
@@ -242,14 +382,14 @@ const make_mixer = () => {
   const on_drag_up = () => {
     drag = null
     document.removeEventListener('mousemove', on_move)
-    document.removeEventListener('mouseup', on_drag_up)
+    document.removeEventListener('mouseup',   on_drag_up)
   }
 
   header.addEventListener('mousedown', e => {
-    if (e.target.closest('button')) return
+    if (e.target.closest('button, input, .mixer-title')) return
     drag = { ox: e.clientX - el.offsetLeft, oy: e.clientY - el.offsetTop }
     document.addEventListener('mousemove', on_move)
-    document.addEventListener('mouseup', on_drag_up)
+    document.addEventListener('mouseup',   on_drag_up)
     e.preventDefault()
   })
 
@@ -271,6 +411,7 @@ const make_mixer = () => {
   }
 
   const make_album_row = (album, media_class = null) => {
+    const lookup = album.install_key || album.title
     const row = document.createElement('div')
     row.className = 'mixer-result-album'
     row.innerHTML = `<span class="mixer-result-album-name">${esc(album.title)}</span><span class="mixer-result-expand">▸</span>`
@@ -287,7 +428,7 @@ const make_mixer = () => {
       if (!opening || _loaded) return
       _loaded = true
       track_wrap.innerHTML = '<div class="mixer-no-results">loading…</div>'
-      const params = new URLSearchParams({ title: album.title, scan_type: album.scan_type })
+      const params = new URLSearchParams({ title: lookup, scan_type: album.scan_type })
       if (media_class) params.set('class', media_class)
       const tracks = await fetch(`/api/album/tracks?${params}`).then(r => r.json()).catch(() => [])
       track_wrap.innerHTML = ''
@@ -296,44 +437,16 @@ const make_mixer = () => {
         const item = document.createElement('div')
         item.className = 'mixer-result-item'
         item.innerHTML = `<button class="mixin-play" title="Add to mix">▶</button><span class="mixin-name" title="${esc(name)}">${esc(name)}</span>`
-        item.querySelector('.mixin-play').addEventListener('click', (e) => {
+        item.querySelector('.mixin-play').addEventListener('click', e => {
           e.stopPropagation()
-          title_el.textContent = name
           add_to_list(t.file_id, name)
+          set_dirty(true)
         })
         track_wrap.appendChild(item)
       }
     })
 
     return [row, track_wrap]
-  }
-
-  const render_track_list = (tracks) => {
-    if (!Array.isArray(tracks) || !tracks.length) {
-      const msg = document.createElement('div')
-      msg.className = 'mixer-no-results'
-      msg.textContent = 'no tracks found'
-      search_res.appendChild(msg)
-      return
-    }
-    const frag = document.createDocumentFragment()
-    for (const t of tracks) {
-      const name = (t.file_name || String(t.file_id)).replace(/\.[^.]+$/, '')
-      const item = document.createElement('div')
-      item.className = 'mixer-result-item'
-      item.innerHTML = `
-        <button class="mixin-play" title="Add to mix">▶</button>
-        <span class="mixin-name" title="${esc(t.full_path || name)}">${esc(name)}</span>
-        <span class="mixer-result-ctx">${esc(t.title || '')}</span>
-      `
-      item.querySelector('.mixin-play').addEventListener('click', (e) => {
-        e.stopPropagation()
-        title_el.textContent = name
-        add_to_list(t.file_id, name)
-      })
-      frag.appendChild(item)
-    }
-    search_res.appendChild(frag)
   }
 
   const show_spinner = () => {
@@ -349,12 +462,12 @@ const make_mixer = () => {
     show_spinner()
 
     if (cls === 'music') {
-      const ql = q.toLowerCase()
+      const ql     = q.toLowerCase()
       const albums = await load_albums()
       if (search_inp.value.trim() !== q || active_class() !== cls) return
       search_res.innerHTML = ''
 
-      const seen = new Set()
+      const seen    = new Set()
       const matches = albums.filter(a => {
         if (a.scan_type !== 'music') return false
         const key = a.title?.toLowerCase() ?? ''
@@ -397,7 +510,7 @@ const make_mixer = () => {
 
     const frag = document.createDocumentFragment()
     for (const t of titles) {
-      const [row, track_wrap] = make_album_row({ title: t.title, scan_type: 'files' }, cls)
+      const [row, track_wrap] = make_album_row({ title: t.title, install_key: t.install_key, scan_type: 'files' }, cls)
       frag.appendChild(row)
       frag.appendChild(track_wrap)
     }
@@ -412,7 +525,72 @@ const make_mixer = () => {
 
   render_search()
 
+  // ── load saved config ─────────────────────────────────────────────────────────
+
+  if (config) {
+    vol_inp.value = config.master_vol ?? 1
+    for (const m of config.mixins ?? []) {
+      add_to_list(m.file_id, m.name, m.vol ?? 1)
+    }
+  }
+
   document.body.appendChild(el)
 }
 
-window.open_mixer = make_mixer
+// ── open saved mixer popup ────────────────────────────────────────────────────
+
+const open_mixer_list = () => {
+  const existing = document.getElementById('mixer-open-popup')
+  if (existing) { existing.remove(); return }
+
+  const keys = Object.keys(localStorage).filter(k => k.startsWith(STORAGE_PREFIX)).sort()
+
+  const popup = document.createElement('div')
+  popup.id = 'mixer-open-popup'
+  popup.className = 'mixer-open-popup'
+  popup.innerHTML = `
+    <div class="mixer-open-header">
+      <span>Saved Mixers</span>
+      <button class="mixer-open-close" title="Close">✕</button>
+    </div>
+    <div class="mixer-open-list"></div>
+    <div class="mixer-open-footer">
+      <button class="mixer-open-btn">Open</button>
+    </div>
+  `
+
+  const list_el = popup.querySelector('.mixer-open-list')
+  if (!keys.length) {
+    list_el.innerHTML = '<div class="mixer-no-results">No saved mixers</div>'
+  } else {
+    for (const key of keys) {
+      const name = key.slice(STORAGE_PREFIX.length)
+      const row = document.createElement('label')
+      row.className = 'mixer-open-item'
+      row.innerHTML = `<input type="checkbox" value="${esc(key)}"><span>${esc(name)}</span>`
+      list_el.appendChild(row)
+    }
+  }
+
+  popup.querySelector('.mixer-open-close').addEventListener('click', () => popup.remove())
+
+  popup.querySelector('.mixer-open-btn').addEventListener('click', () => {
+    for (const cb of popup.querySelectorAll('input[type=checkbox]:checked')) {
+      const raw = localStorage.getItem(cb.value)
+      if (!raw) continue
+      try { make_mixer(JSON.parse(raw)) } catch(e) { console.error('[mixer] load failed:', e) }
+    }
+    popup.remove()
+  })
+
+  document.body.appendChild(popup)
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'o' && e.key !== 'O') return
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+  open_mixer_list()
+})
+
+window.open_mixer      = make_mixer
+window.open_mixer_list = open_mixer_list

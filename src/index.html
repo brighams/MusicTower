@@ -13,6 +13,8 @@
 <audio id="audio-player"></audio>
 <div id="vis-container"></div>
 <img id="corner-art" alt="">
+<span id="vis-count-display"></span>
+<div id="shader-author"></div>
 
 <div id="now-playing">
   <div id="np-top">
@@ -52,8 +54,7 @@
     <h3 class="info-section-title">Settings</h3>
     <div class="info-setting-row">
       <label class="info-setting-label" for="vis-count-input">Visualizer layers</label>
-      <input class="info-setting-slider" id="vis-count-input" type="range" min="1" max="6" step="1" value="1"
-        oninput="window.set_vis_count?.(parseInt(this.value)); document.getElementById('vis-count-val').textContent=this.value">
+      <input class="info-setting-slider" id="vis-count-input" type="range" min="1" max="6" step="1" value="1">
       <span id="vis-count-val" class="info-setting-val">1</span>
     </div>
     <h3 class="info-section-title" style="margin-top:18px">Keyboard Shortcuts</h3>
@@ -65,6 +66,7 @@
       <tr><td class="kb-key">A</td><td class="kb-desc">Toggle album mode</td></tr>
       <tr><td class="kb-key">F</td><td class="kb-desc">Toggle fullscreen</td></tr>
       <tr><td class="kb-key">M</td><td class="kb-desc">Open a mixer</td></tr>
+      <tr><td class="kb-key">O</td><td class="kb-desc">Open saved mixer</td></tr>
       <tr><td class="kb-key">Tab</td><td class="kb-desc">Force visualizer change</td></tr>
       <tr><td class="kb-key">Bksp</td><td class="kb-desc">Hide / show visualizer</td></tr>
       <tr><td class="kb-key">?</td><td class="kb-desc">Open / close this panel</td></tr>
@@ -235,7 +237,11 @@ let ALL_ST_ALBUMS = []
 let ALL_DM_ALBUMS = []
 
 AUDIO.onplay  = () => { document.getElementById('np-play').textContent = '⏸'; start_vsvis() }
-AUDIO.onpause = () => { document.getElementById('np-play').textContent = '▶'; stop_vsvis() }
+AUDIO.onpause = () => {
+  document.getElementById('np-play').textContent = '▶'
+  stop_vsvis()
+  _clear_img?.(document.getElementById('corner-art'))
+}
 AUDIO.onended = () => {
   if (albumMode) {
     if (player.idx + 1 < player.tracks.length) {
@@ -679,10 +685,6 @@ function filterAll(q) {
     div.style.display = !term || div.dataset.name.includes(term) ? '' : 'none'
   }
 }
-
-const _vc_inp = document.getElementById('vis-count-input')
-const _vc_val = document.getElementById('vis-count-val')
-if (_vc_inp) { const v = localStorage.getItem('vis_count') || '1'; _vc_inp.value = v; if (_vc_val) _vc_val.textContent = v }
 
 load().then(() => {
   toggleRandom()
