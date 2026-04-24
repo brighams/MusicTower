@@ -1288,7 +1288,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "music_server"
+name = "music_tower"
 version = "0.1.0"
 dependencies = [
  "axum",

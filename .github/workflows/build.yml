@@ -12,16 +12,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary: music_server
-            archive: music_server-linux-x86_64
+            binary: music_tower
+            archive: music_tower-linux-x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary: music_server.exe
-            archive: music_server-windows-x86_64
+            binary: music_tower.exe
+            archive: music_tower-windows-x86_64
           - os: macos-latest
             target: aarch64-apple-darwin
-            binary: music_server
-            archive: music_server-macos-aarch64
+            binary: music_tower
+            archive: music_tower-macos-aarch64
 
     runs-on: ${{ matrix.os }}
 

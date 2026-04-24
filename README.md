@@ -59,7 +59,7 @@ cd SteamMusicServer
 cargo build --release
 ```
 
-The binary is written to `target/release/music_server`.
+The binary is written to `target/release/music_tower`.
 
 On Windows, `winreg` is compiled in automatically to read the Steam registry key — no extra steps needed.
 
@@ -134,16 +134,16 @@ STEAM_ID=XXXXXXXXXXXXXXXXX
 
 ```sh
 # Scan and serve (default — listens on https://127.0.0.1:8086)
-./music_server
+./music_tower
 
 # Specify a different config file
-./music_server path/to/my_config.yaml
+./music_tower path/to/my_config.yaml
 
 # Bind to a different address
-./music_server --serve=0.0.0.0:9000
+./music_tower --serve=0.0.0.0:9000
 
 # Scan only, no web server
-./music_server --no-serve
+./music_tower --no-serve
 ```
 
 On startup the server scans all configured roots, rebuilds `starkeeper.db`, then starts serving. Open the address shown in the terminal to use the web player.

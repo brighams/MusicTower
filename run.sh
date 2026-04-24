@@ -3,4 +3,4 @@ set -e
 
 # bash build.sh
 cargo build
-target/debug/music_server
+target/debug/music_tower
