@@ -2,121 +2,6 @@ const MEDIA_CLASSES    = ['music', 'effect', 'voice', 'audiobook']
 const STORAGE_PREFIX   = 'mixer.'
 let _count = 0
 
-const WAVE_DRAW_PTS = 80
-const WAVE_SMOOTH_A = 0.15
-
-const make_wave_draw = (analyser, canvas, ctx2d) => {
-  const wave_data  = new Uint8Array(analyser.frequencyBinCount)
-  const smooth_buf = new Float32Array(WAVE_DRAW_PTS).fill(128)
-  let raf_id = null
-
-  const draw = () => {
-    raf_id = requestAnimationFrame(draw)
-    analyser.getByteTimeDomainData(wave_data)
-    const stride = Math.floor(wave_data.length / WAVE_DRAW_PTS)
-    for (let i = 0; i < WAVE_DRAW_PTS; i++) {
-      let s = 0
-      for (let j = 0; j < stride; j++) s += wave_data[i * stride + j]
-      smooth_buf[i] = smooth_buf[i] * (1 - WAVE_SMOOTH_A) + (s / stride) * WAVE_SMOOTH_A
-    }
-    ctx2d.clearRect(0, 0, canvas.width, canvas.height)
-    ctx2d.strokeStyle = '#ff0088'
-    ctx2d.lineWidth = 1.5
-    ctx2d.beginPath()
-    for (let i = 0; i < WAVE_DRAW_PTS; i++) {
-      const x = (i / (WAVE_DRAW_PTS - 1)) * canvas.width
-      const y = (smooth_buf[i] / 255) * canvas.height
-      if (i === 0) ctx2d.moveTo(x, y)
-      else         ctx2d.lineTo(x, y)
-    }
-    ctx2d.stroke()
-  }
-
-  const start = () => {
-    canvas.width  = canvas.offsetWidth  || 200
-    canvas.height = canvas.offsetHeight || 28
-    if (!raf_id) draw()
-  }
-
-  const stop = () => {
-    if (raf_id) { cancelAnimationFrame(raf_id); raf_id = null }
-    smooth_buf.fill(128)
-    ctx2d.clearRect(0, 0, canvas.width, canvas.height)
-  }
-
-  return { start, stop }
-}
-
-window.make_wave_draw = make_wave_draw
-
-const EQ_BANDS = 6
-// fftSize 4096 @ 44.1kHz -> ~10.77 Hz per bin. Roughly log-spaced bands.
-const EQ_BIN_RANGES = [
-  [2,    10],   // ~22-108 Hz   sub/bass
-  [10,   30],   // ~108-323 Hz  low-mid
-  [30,   90],   // ~323-970 Hz  mid
-  [90,   280],  // ~970-3010 Hz upper-mid
-  [280,  800],  // ~3-8.6 kHz   presence
-  [800,  2000], // ~8.6-21.5kHz brilliance
-]
-const EQ_SMOOTH_A = 0.5
-const EQ_SEG_H    = 2
-const EQ_SEG_GAP  = 1
-
-const make_eq_draw = (analyser, canvas, ctx2d) => {
-  const freq_data = new Uint8Array(analyser.frequencyBinCount)
-  const smooth    = new Float32Array(EQ_BANDS).fill(0)
-  let raf_id = null
-
-  const draw = () => {
-    raf_id = requestAnimationFrame(draw)
-    analyser.getByteFrequencyData(freq_data)
-
-    const w = canvas.width
-    const h = canvas.height
-    const slot_w = w / EQ_BANDS
-    const bar_w  = Math.max(1, slot_w - 2)
-    const pitch  = EQ_SEG_H + EQ_SEG_GAP
-    const segs   = Math.max(1, Math.floor((h + EQ_SEG_GAP) / pitch))
-
-    ctx2d.clearRect(0, 0, w, h)
-
-    for (let i = 0; i < EQ_BANDS; i++) {
-      const [lo, hi] = EQ_BIN_RANGES[i]
-      let s = 0
-      for (let j = lo; j < hi; j++) s += freq_data[j]
-      const v = s / ((hi - lo) * 255)
-      smooth[i] = smooth[i] * (1 - EQ_SMOOTH_A) + v * EQ_SMOOTH_A
-
-      const lit = Math.min(segs, Math.round(smooth[i] * segs * 1.4))
-      const x   = i * slot_w + 1
-
-      for (let k = 0; k < lit; k++) {
-        const t  = k / Math.max(1, segs - 1)
-        const sy = h - k * pitch - EQ_SEG_H
-        ctx2d.fillStyle = t < 0.55 ? '#40d8e8' : (t < 0.82 ? '#c060f0' : '#ff0088')
-        ctx2d.fillRect(x, sy, bar_w, EQ_SEG_H)
-      }
-    }
-  }
-
-  const start = () => {
-    canvas.width  = canvas.offsetWidth  || 72
-    canvas.height = canvas.offsetHeight || 24
-    if (!raf_id) draw()
-  }
-
-  const stop = () => {
-    if (raf_id) { cancelAnimationFrame(raf_id); raf_id = null }
-    smooth.fill(0)
-    ctx2d.clearRect(0, 0, canvas.width, canvas.height)
-  }
-
-  return { start, stop }
-}
-
-window.make_eq_draw = make_eq_draw
-
 const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
 const make_mixer = (config = null) => {
@@ -135,9 +20,9 @@ const make_mixer = (config = null) => {
     <div class="mixer-header">
       <span class="mixer-title" title="Double-click to rename">M${n}: ${esc(_name)}</span>
       <div class="mixer-header-actions">
-        <button class="mixer-minimize" title="Minimize">–</button>
         <button class="mixer-trash" title="Delete saved mixer" style="display:none">🗑</button>
         <button class="mixer-save"  title="Save mixer">💾</button>
+        <button class="mixer-minimize" title="Minimize">–</button>
         <button class="mixer-close" title="Close">✕</button>
       </div>
     </div>
@@ -152,8 +37,10 @@ const make_mixer = (config = null) => {
           <div class="mixer-record-wrap">
             <img src="/assets/mixer.png" class="mixer-record" alt="">
           </div>
-          <input type="range" class="mixer-volume" min="0" max="1" step="0.01" value="1"
-            orient="vertical" title="Master volume">
+          <div class="mixer-volume-wrap">
+            <input type="range" class="mixer-volume" min="0" max="1" step="0.01" value="1"
+              orient="vertical" title="Master volume">
+          </div>
         </div>
         <div class="mixer-mixin-list"></div>
       </div>
@@ -321,7 +208,7 @@ const make_mixer = (config = null) => {
 
   // ── add item to the mix list ─────────────────────────────────────────────────
 
-  const add_to_list = async (file_id, name, initial_vol = 1) => {
+  const add_to_list = async (file_id, name, initial_vol = 1, auto_play = false) => {
     const result = await inject(file_id)
     if (!result) return
     const { audio, item_gain, item_analyser } = result
@@ -332,9 +219,9 @@ const make_mixer = (config = null) => {
     item.className = 'mixer-mixin'
     item.dataset.fileId = file_id
     item.innerHTML = `
-      <canvas class="mixin-canvas"></canvas>
       <button class="mixin-play"   title="Play / Pause">▶</button>
       <span   class="mixin-name"   title="${esc(name)}">${esc(name)}</span>
+      <canvas class="mixin-canvas"></canvas>
       <input  type="range" class="mixin-vol" min="0" max="1" step="0.01" value="${initial_vol}">
       <button class="mixin-remove" title="Remove">✕</button>
     `
@@ -344,7 +231,7 @@ const make_mixer = (config = null) => {
     const vol_slider = item.querySelector('.mixin-vol')
     const canvas = item.querySelector('.mixin-canvas')
     const ctx2d  = canvas.getContext('2d')
-    const { start: start_wave, stop: stop_wave } = make_wave_draw(item_analyser, canvas, ctx2d)
+    const { start: start_wave, stop: stop_wave } = window.make_eq_draw(item_analyser, canvas, ctx2d)
 
     remove_btn.addEventListener('click', e => {
       e.stopPropagation()
@@ -371,6 +258,7 @@ const make_mixer = (config = null) => {
     })
 
     mixin_list.prepend(item)
+    if (auto_play) audio.play().catch(e => console.error('[mixer] auto-play failed:', e))
   }
 
   // ── fetch a random track ─────────────────────────────────────────────────────
@@ -394,7 +282,7 @@ const make_mixer = (config = null) => {
       await fetch_track('/api/random/track')
     if (!track?.file_id) return
     const name = (track.file_name || track.title || String(track.file_id)).replace(/\.[^.]+$/, '')
-    add_to_list(track.file_id, name)
+    add_to_list(track.file_id, name, 1, true)
     set_dirty(true)
   }
 
@@ -525,7 +413,7 @@ const make_mixer = (config = null) => {
         item.innerHTML = `<button class="mixin-play" title="Add to mix">▶</button><span class="mixin-name" title="${esc(name)}">${esc(name)}</span>`
         item.querySelector('.mixin-play').addEventListener('click', e => {
           e.stopPropagation()
-          add_to_list(t.file_id, name)
+          add_to_list(t.file_id, name, 1, true)
           set_dirty(true)
         })
         track_wrap.appendChild(item)

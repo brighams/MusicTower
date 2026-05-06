@@ -6,6 +6,7 @@ const STYLES_CSS: &str = include_str!("../../src/styles.css");
 const IMG_COALESCE_JS: &str = include_str!("../../src/ImgCoalesce.js");
 const MIXER_CSS: &str = include_str!("../../src/mixer.css");
 const MIXER_JS: &str = include_str!("../../src/mixer.js");
+const EQ_JS: &str = include_str!("../../src/eq.js");
 const VERTEXSHADERVIS_JS: &str = include_str!("../../src/VSA_shadercore.js");
 const MIXER_PNG: &[u8] = include_bytes!("../../assets/mixer.png");
 
@@ -388,6 +389,10 @@ async fn serve_mixer_css() -> impl IntoResponse {
 
 async fn serve_mixer_js() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "application/javascript")], MIXER_JS)
+}
+
+async fn serve_eq_js() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "application/javascript")], EQ_JS)
 }
 
 async fn serve_vertexshadervis_js() -> impl IntoResponse {
@@ -972,6 +977,7 @@ pub async fn start(
         .route("/ImgCoalesce.js", get(serve_img_coalesce_js))
         .route("/mixer.css", get(serve_mixer_css))
         .route("/mixer.js", get(serve_mixer_js))
+        .route("/eq.js", get(serve_eq_js))
         .route("/VSA_shadercore.js", get(serve_vertexshadervis_js))
         .route("/assets/mixer.png", get(serve_mixer_png))
         .route("/api/summary", get(api_summary))
