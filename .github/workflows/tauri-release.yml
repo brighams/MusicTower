@@ -7,7 +7,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  guard:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag commit is on the tauri branch
+        run: |
+          git fetch origin tauri --depth=0
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/tauri; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (${GITHUB_SHA}) is not reachable from the tauri branch. Releases must be tagged on tauri."
+            exit 1
+          fi
+
   build:
+    needs: [guard]
+    if: ${{ always() && (needs.guard.result == 'success' || needs.guard.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +41,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Syncing manifests to version $VERSION"
+          python - "$VERSION" <<'PY'
+          import json, re, sys, pathlib
+          v = sys.argv[1]
+          conf = pathlib.Path('src-tauri/tauri.conf.json')
+          d = json.loads(conf.read_text())
+          d['version'] = v
+          conf.write_text(json.dumps(d, indent=2) + '\n')
+          cargo = pathlib.Path('src-tauri/Cargo.toml')
+          src = cargo.read_text()
+          src = re.sub(r'(?m)^version\s*=\s*"[^"]+"', f'version = "{v}"', src, count=1)
+          cargo.write_text(src)
+          PY
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -74,7 +111,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -88,3 +125,4 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+          fail_on_unmatched_files: true
