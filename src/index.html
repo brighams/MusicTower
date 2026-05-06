@@ -27,10 +27,10 @@
     <button class="np-btn active" id="np-screensaver" onclick="toggleScreensaver()" title="Toggle screensaver">✨</button>
     <div id="np-track-area">
       <div id="np-track">
-        <canvas id="np-wave"></canvas>
         <span id="np-label">Now Playing</span>
         <span id="np-filename">—</span>
       </div>
+      <canvas id="np-wave"></canvas>
       <span id="np-album"></span>
       <div id="shader-progress" style="display:none;font-size:0.72em;color:#40d8e8;flex-shrink:0;padding:0 6px;position:relative;z-index:1"></div>
     </div>
@@ -700,7 +700,7 @@ let np_wave_ctrl = null
 const np_start_wave = () => {
   const an = window.get_np_analyser?.()
   if (!an || !np_canvas || !np_ctx2d) return
-  if (!np_wave_ctrl) np_wave_ctrl = window.make_wave_draw(an, np_canvas, np_ctx2d)
+  if (!np_wave_ctrl) np_wave_ctrl = window.make_eq_draw(an, np_canvas, np_ctx2d)
   np_wave_ctrl.start()
 }
 
